@@ -1,1 +1,14 @@
 WBAD Project Milestone 1 - WorkFlows
+
+Workflow 1: User Joining or Creating a Study Room
+
+done by: Fatima
+
+Workflow 2: Synchronized Pomodoro Study Session
+
+done by: Sumaiya
+
+Workflow 3: In-Room Collaboration and Focus Environment
+
+done by: Ammar
+.
