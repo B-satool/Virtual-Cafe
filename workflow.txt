@@ -10,4 +10,21 @@ done by: Sumaiya
 
 Workflow 3: In-Room Collaboration and Focus Environment
 
+    Workflow Specification
+    This workflow explains how users collaborate and customize their focus environment within a study room.
+
+    Step-by-Step Description
+        1. After joining a room, the user accesses the shared task list.
+        2. The user can add, edit, delete, or mark tasks as completed.
+        3. All task list updates are instantly visible to other room members.
+        4. The user enables or disables ambient background sounds such as rain or café noise.
+        5. The user adjusts volume settings locally without affecting other participants.
+        6. The interface visually reflects the room’s current mode (Study or Break) to support focus.
+
+    Key Features & Functionalities
+        - Shared task board per room
+        - Real-time task updates
+        - Ambient sound controls (local)
+        - Visual room status indicators
+
 done by: Ammar
