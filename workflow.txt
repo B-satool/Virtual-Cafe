@@ -29,6 +29,25 @@ done by: Fatima
 
 Workflow 2: Synchronized Pomodoro Study Session
 
+    Workflow Specification
+    This workflow defines how users participate in a shared, synchronized study and break session within a room.
+
+    Step-by-Step Description
+        1. The room host starts the Pomodoro timer.
+        2. The system initializes the timer and synchronizes it across all room participants.
+        3. All users see the same countdown timer and current mode (Study or Break).
+        4. When the study session ends, the system automatically transitions to break mode.
+        5. The timer continues cycling between study and break sessions until stopped or reset.
+        6. If a user joins the room mid-session, the system syncs their timer with the current session state.
+        7. If a user refreshes the page, the timer state is restored from the backend.
+        8. The host can pause, reset, or restart the timer if needed.
+
+    Key Features & Functionalities
+        - Shared Pomodoro timer
+        - Real-time synchronization
+        - Automatic session transitions
+        - Handling edge cases (mid-session join, refresh, host leave)
+
 done by: Sumaiya
 
 Workflow 3: In-Room Collaboration and Focus Environment
