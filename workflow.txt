@@ -2,6 +2,29 @@ WBAD Project Milestone 1 - WorkFlows
 
 Workflow 1: User Joining or Creating a Study Room
 
+    Workflow Specification
+    This workflow describes how a user enters the application and joins an existing study room or creates a new one.
+
+    Step-by-Step Description
+    1. The user opens the Virtual Café / Study Room web application.
+    2. The system displays available public study rooms along with an option to create a private room.
+    3. The user selects one of the following:
+      - Joins a public room, or
+      - Creates a private room using a room code.
+    4. If joining a private room, the system validates the room code.
+    5. Upon successful validation, the system adds the user to the room.
+    6. The room interface is displayed showing:
+      - Current participants
+      - Room capacity
+      - Room status (Study or Break)
+    7. The system updates presence indicators in real time when users join or leave the room.
+
+    Key Features & Functionalities
+    - Public and private room access
+    - Room creation and joining
+    - Access control via invite codes
+    - Real-time presence updates
+
 done by: Fatima
 
 Workflow 2: Synchronized Pomodoro Study Session
