@@ -19,14 +19,16 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // ROOMS OPERATIONS
 // =============================================
 
-async function createRoom(roomCode, isPublic = true, capacity = 10, createdBy = null) {
+async function createRoom(roomCode, roomName, isPublic = true, capacity = 10, requiresApproval = false, createdBy = null) {
   try {
     const { data, error } = await supabase
       .from('rooms')
       .insert([
         {
           room_code: roomCode,
+          room_name: roomName,
           is_public: isPublic,
+          requires_approval: requiresApproval,
           capacity: capacity,
           created_by: createdBy
         }
@@ -394,6 +396,110 @@ async function getActivityLog(roomId, limit = 100) {
 }
 
 // =============================================
+// JOIN REQUESTS (for private room approval)
+// =============================================
+
+async function createJoinRequest(roomId, userId, username) {
+  try {
+    const { data, error } = await supabase
+      .from('join_requests')
+      .insert([
+        {
+          room_id: roomId,
+          user_id: userId,
+          username: username,
+          status: 'pending'
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, request: data };
+  } catch (error) {
+    console.error('Error creating join request:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function getJoinRequests(roomId, status = null) {
+  try {
+    let query = supabase
+      .from('join_requests')
+      .select('*')
+      .eq('room_id', roomId);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query.order('requested_at', { ascending: true });
+
+    if (error) throw error;
+    return { success: true, requests: data };
+  } catch (error) {
+    console.error('Error getting join requests:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function approveJoinRequest(requestId, approvedBy) {
+  try {
+    const { data, error } = await supabase
+      .from('join_requests')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: approvedBy
+      })
+      .eq('id', requestId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, request: data };
+  } catch (error) {
+    console.error('Error approving join request:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function rejectJoinRequest(requestId) {
+  try {
+    const { data, error } = await supabase
+      .from('join_requests')
+      .update({
+        status: 'rejected'
+      })
+      .eq('id', requestId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, request: data };
+  } catch (error) {
+    console.error('Error rejecting join request:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function deleteJoinRequest(roomId, userId) {
+  try {
+    const { error } = await supabase
+      .from('join_requests')
+      .delete()
+      .eq('room_id', roomId)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting join request:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+// =============================================
 // EXPORTS
 // =============================================
 
@@ -428,5 +534,12 @@ module.exports = {
   
   // Activity Log
   logActivity,
-  getActivityLog
+  getActivityLog,
+
+  // Join Requests
+  createJoinRequest,
+  getJoinRequests,
+  approveJoinRequest,
+  rejectJoinRequest,
+  deleteJoinRequest
 };

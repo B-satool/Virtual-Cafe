@@ -35,6 +35,10 @@ const timerIntervals = new Map(); // roomId -> intervalId
 // HELPER FUNCTIONS
 // ============================================
 
+function generateRandomRoomCode() {
+  return Math.floor(Math.random() * 900000 + 100000).toString();
+}
+
 async function initializeRoom(roomId) {
   // Get room data from database
   const roomResult = await db.getRoomById(roomId);
@@ -47,6 +51,7 @@ async function initializeRoom(roomId) {
   const room = {
     id: roomResult.room.id,
     roomCode: roomResult.room.room_code,
+    roomName: roomResult.room.room_name,
     isPublic: roomResult.room.is_public,
     capacity: roomResult.room.capacity,
     participants: participantsResult.success ? participantsResult.participants : [],
@@ -78,7 +83,9 @@ function getRoomFullState(room) {
   return {
     id: room.id,
     roomCode: room.roomCode,
+    roomName: room.roomName,
     isPublic: room.isPublic,
+    requiresApproval: room.requiresApproval,
     capacity: room.capacity,
     participants: room.participants,
     tasks: room.tasks,
@@ -221,6 +228,7 @@ app.get('/api/rooms/public', async (req, res) => {
     return {
       id: room.id,
       roomCode: room.room_code,
+      roomName: room.room_name,
       isPublic: room.is_public,
       participantCount: activeRoom ? activeRoom.participants.length : 0,
       capacity: room.capacity,
@@ -234,24 +242,29 @@ app.get('/api/rooms/public', async (req, res) => {
 
 // Create a new room
 app.post('/api/rooms', async (req, res) => {
-  const { roomCode, isPublic = true, capacity = 10 } = req.body;
+  const { roomName, isPublic = true, capacity = 10 } = req.body;
 
-  if (!roomCode || roomCode.trim() === '') {
-    return res.status(400).json({ error: 'Room code is required' });
+  if (!roomName || roomName.trim() === '') {
+    return res.status(400).json({ error: 'Room name is required' });
   }
 
-  // Check if room code already exists
-  const existsResult = await db.checkRoomExists(roomCode);
-  if (!existsResult.success) {
-    return res.status(500).json({ error: 'Database error' });
-  }
+  // For private rooms, set requires_approval to true
+  const requiresApproval = !isPublic;
 
-  if (existsResult.exists) {
-    return res.status(400).json({ error: 'Room code already exists' });
+  // Generate unique 6-digit room code
+  let roomCode;
+  let codeExists = true;
+  while (codeExists) {
+    roomCode = generateRandomRoomCode();
+    const existsResult = await db.checkRoomExists(roomCode);
+    if (!existsResult.success) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    codeExists = existsResult.exists;
   }
 
   // Create room
-  const createResult = await db.createRoom(roomCode, isPublic, capacity);
+  const createResult = await db.createRoom(roomCode, roomName, isPublic, capacity, requiresApproval);
   if (!createResult.success) {
     return res.status(500).json({ error: createResult.error });
   }
@@ -262,7 +275,9 @@ app.post('/api/rooms', async (req, res) => {
   res.status(201).json({
     id: createResult.room.id,
     roomCode: createResult.room.room_code,
+    roomName: createResult.room.room_name,
     isPublic: createResult.room.is_public,
+    requiresApproval: createResult.room.requires_approval,
     capacity: createResult.room.capacity
   });
 });
@@ -280,6 +295,7 @@ app.get('/api/rooms/:roomCode', async (req, res) => {
   res.json({
     id: codeResult.room.id,
     roomCode: codeResult.room.room_code,
+    roomName: codeResult.room.room_name,
     isPublic: codeResult.room.is_public,
     participantCount: activeRoom ? activeRoom.participants.length : 0,
     capacity: codeResult.room.capacity,
@@ -360,6 +376,127 @@ io.on('connection', (socket) => {
     socket.emit('room:state', getRoomFullState(room));
 
     console.log(`${username} joined room ${roomCode}`);
+  });
+
+  // User requests to join a private room (goes to waiting room)
+  socket.on('room:join-request', async (data) => {
+    const { roomCode, username } = data;
+
+    // Get room from database
+    const roomResult = await db.getRoomByCode(roomCode);
+    if (!roomResult.success || !roomResult.room) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+
+    const roomId = roomResult.room.id;
+    const room = roomResult.room;
+
+    // Check if room requires approval
+    if (!room.requires_approval) {
+      // If public room, just join directly
+      socket.emit('room:join-approved', { roomCode });
+      return;
+    }
+
+    // Create join request in database
+    const requestResult = await db.createJoinRequest(roomId, socket.id, username);
+    if (!requestResult.success) {
+      socket.emit('error', { message: 'Failed to request to join room' });
+      return;
+    }
+
+    // Store join request info on socket
+    socket.data.roomId = roomId;
+    socket.data.userId = socket.id;
+    socket.data.username = username;
+    socket.data.joinRequestId = requestResult.request.id;
+
+    // Join socket to a temporary room for notifications
+    socket.join(`room-${roomId}-requests`);
+
+    // Send confirmation to user
+    socket.emit('room:join-request-sent', {
+      roomCode,
+      roomName: room.room_name,
+      requestId: requestResult.request.id
+    });
+
+    // Notify the host about the new request
+    const participantsResult = await db.getParticipants(roomId);
+    if (participantsResult.success) {
+      participantsResult.participants.forEach(participant => {
+        if (participant.is_host) {
+          io.to(roomId).emit('request:pending', {
+            requestId: requestResult.request.id,
+            username,
+            userId: socket.id,
+            message: `${username} is requesting to join the room`
+          });
+        }
+      });
+    }
+
+    console.log(`${username} requested to join private room ${roomCode}`);
+  });
+
+  // Host approves a join request
+  socket.on('request:approve', async (data) => {
+    const { requestId, username, userId, roomCode } = data;
+
+    // Get room from database
+    const roomResult = await db.getRoomByCode(roomCode);
+    if (!roomResult.success || !roomResult.room) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+
+    const roomId = roomResult.room.id;
+
+    // Approve the request in database
+    const approveResult = await db.approveJoinRequest(requestId, socket.id);
+    if (!approveResult.success) {
+      socket.emit('error', { message: 'Failed to approve request' });
+      return;
+    }
+
+    // Notify the requesting user that they're approved
+    io.to(`room-${roomId}-requests`).emit('room:join-approved', {
+      roomCode,
+      userId
+    });
+
+    console.log(`Host approved ${username} to join room ${roomCode}`);
+  });
+
+  // Host rejects a join request
+  socket.on('request:reject', async (data) => {
+    const { requestId, username, userId, roomCode } = data;
+
+    // Get room from database
+    const roomResult = await db.getRoomByCode(roomCode);
+    if (!roomResult.success || !roomResult.room) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+
+    const roomId = roomResult.room.id;
+
+    // Reject the request in database
+    const rejectResult = await db.rejectJoinRequest(requestId);
+    if (!rejectResult.success) {
+      socket.emit('error', { message: 'Failed to reject request' });
+      return;
+    }
+
+    // Notify the requesting user that they're rejected
+    io.to(`room-${roomId}-requests`).emit('room:join-rejected', {
+      roomCode,
+      userId,
+      message: 'Your request to join this room was rejected'
+    });
+
+    console.log(`Host rejected ${username}'s request to join room ${roomCode}`);
   });
 
   // User leaves a room

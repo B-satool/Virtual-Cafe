@@ -213,6 +213,52 @@
             display: block;
         }
 
+        /* Waiting Room Page */
+        .waiting-room-page {
+            display: none;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f5e6d3 0%, #e8cdb3 100%);
+        }
+
+        .waiting-room-container {
+            text-align: center;
+            background: white;
+            border-radius: 15px;
+            padding: 60px 40px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+            max-width: 400px;
+        }
+
+        .waiting-room-container h2 {
+            color: #5c4033;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .waiting-room-container p {
+            color: #8d6e63;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #ddd;
+            border-top: 4px solid #a1887f;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .room-header {
             background: white;
             border-radius: 15px;
@@ -632,14 +678,14 @@
                         <input type="text" id="createUsername" placeholder="Enter your name">
                     </div>
                     <div class="form-group">
-                        <label for="roomCode">Room Code</label>
-                        <input type="text" id="roomCode" placeholder="e.g., study-group-01">
+                        <label for="roomName">Room Name</label>
+                        <input type="text" id="roomName" placeholder="e.g., Morning Study Group">
                     </div>
                     <div class="form-group">
                         <label for="roomType">Room Type</label>
                         <select id="roomType">
-                            <option value="public">Public (Anyone can join)</option>
-                            <option value="private">Private (Invite only)</option>
+                            <option value="public">Public (Anyone can join with code)</option>
+                            <option value="private">Private (You approve participants)</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -648,6 +694,30 @@
                     </div>
                     <button class="btn-full-width" onclick="createRoom()">Create Room</button>
                 </div>
+
+                <!-- Join Room -->
+                <div class="card">
+                    <h2>Join a Study Room</h2>
+                    <div class="form-group">
+                        <label for="joinUsername">Your Name</label>
+                        <input type="text" id="joinUsername" placeholder="Enter your name">
+                    </div>
+                    <div class="form-group">
+                        <label for="roomCodeInput">Room Code</label>
+                        <input type="text" id="roomCodeInput" placeholder="Enter 6-digit code" maxlength="6">
+                    </div>
+                    <button class="btn-full-width" onclick="joinRoomByCode()">Join Room</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Waiting Room Page (for approval pending) -->
+        <div id="waitingRoomPage" class="waiting-room-page" style="display: none;">
+            <div class="waiting-room-container">
+                <h2>Waiting for Approval</h2>
+                <p id="waitingRoomMessage">The room host is reviewing your request...</p>
+                <div class="loading-spinner"></div>
+                <button class="btn-secondary" onclick="cancelJoinRequest()" style="margin-top: 30px;">Cancel Request</button>
             </div>
         </div>
 
@@ -658,6 +728,7 @@
             <!-- Room Header -->
             <div class="room-header">
                 <div class="room-title" id="currentRoomTitle">Study Room</div>
+                <div class="room-subtitle" id="currentRoomSubtitle" style="font-size: 0.9em; color: #666; margin-bottom: 10px;"></div>
                 <div class="room-info">
                     <div class="info-box">
                         <div class="info-label">Room Code</div>
@@ -685,6 +756,12 @@
                     <button onclick="resetTimer()">Reset</button>
                 </div>
                 <div id="hostInfo" style="margin-top: 15px; color: #8d6e63; font-size: 0.9em;"></div>
+                
+                <!-- Pending Requests Panel (only for private room hosts) -->
+                <div id="pendingRequestsPanel" style="margin-top: 20px; padding: 15px; background: #fff3e0; border-radius: 10px; display: none;">
+                    <h4 style="color: #e65100; margin-bottom: 10px;">👥 Pending Join Requests</h4>
+                    <div id="pendingRequestsList" style="max-height: 200px; overflow-y: auto;"></div>
+                </div>
             </div>
 
             <!-- Main Content -->
@@ -748,6 +825,7 @@
         let socket = null;
         let currentRoom = null;
         let currentUserId = null;
+        let currentUsername = null;
         let isHost = false;
         let roomState = {};
         let soundVolumes = {
@@ -845,12 +923,98 @@
                 showNotification(data.message, true);
             });
 
+            // Join request sent to waiting room
+            socket.on('room:join-request-sent', (data) => {
+                showNotification(`Request sent to join ${data.roomName}`, false);
+                console.log('Join request sent, waiting for approval');
+            });
+
+            // Approved to join room (after waiting in waiting room)
+            socket.on('room:join-approved', (data) => {
+                document.getElementById('landingPage').classList.remove('active');
+                document.getElementById('waitingRoomPage').style.display = 'none';
+                socket.emit('room:join', {
+                    roomCode: currentRoom,
+                    username: currentUsername
+                });
+                showRoomPage();
+                showNotification('Your request has been approved!', false);
+            });
+
+            // Rejected to join room
+            socket.on('room:join-rejected', (data) => {
+                document.getElementById('waitingRoomPage').style.display = 'none';
+                document.getElementById('landingPage').classList.add('active');
+                currentRoom = null;
+                currentUsername = null;
+                socket.disconnect();
+                socket = null;
+                showNotification(data.message, true);
+            });
+
+            // Host receives pending request to approve
+            socket.on('request:pending', (data) => {
+                if (isHost) {
+                    showNotification(`${data.username} is requesting to join`, false);
+                    // Show approval panel (we'll implement this in the room UI)
+                    displayPendingRequest(data);
+                }
+            });
+
             socket.on('disconnect', () => {
                 console.log('Disconnected from server');
             });
         }
 
-        // ============================================
+        function displayPendingRequest(request) {
+            // Create a pending request notification that host can approve/reject
+            const requestPanel = document.getElementById('pendingRequestsPanel');
+            const requestsList = document.getElementById('pendingRequestsList');
+            
+            if (requestPanel && requestsList) {
+                requestPanel.style.display = 'block';
+                const requestDiv = document.createElement('div');
+                requestDiv.className = 'pending-request';
+                requestDiv.setAttribute('data-request-id', request.requestId);
+                requestDiv.style.cssText = 'padding: 10px; margin-bottom: 10px; background: white; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;';
+                requestDiv.innerHTML = `
+                    <span style="flex: 1; margin-right: 10px;"><strong>${request.username}</strong> wants to join</span>
+                    <button onclick="approveRequest('${request.requestId}', '${request.username}')" style="padding: 5px 10px; margin-right: 5px; background: #4caf50; color: white; border: none; border-radius: 3px; cursor: pointer;">Approve</button>
+                    <button onclick="rejectRequest('${request.requestId}', '${request.username}')" style="padding: 5px 10px; background: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">Reject</button>
+                `;
+                requestsList.appendChild(requestDiv);
+            }
+        }
+
+        function approveRequest(requestId, username) {
+            if (socket && isHost) {
+                socket.emit('request:approve', {
+                    requestId,
+                    username,
+                    userId: requestId.split('-')[0],
+                    roomCode: currentRoom
+                });
+                showNotification(`Approved ${username}`, false);
+                // Remove from panel
+                const panel = document.querySelector(`[data-request-id="${requestId}"]`);
+                if (panel) panel.remove();
+            }
+        }
+
+        function rejectRequest(requestId, username) {
+            if (socket && isHost) {
+                socket.emit('request:reject', {
+                    requestId,
+                    username,
+                    userId: requestId.split('-')[0],
+                    roomCode: currentRoom
+                });
+                showNotification(`Rejected ${username}`, false);
+                // Remove from panel
+                const panel = document.querySelector(`[data-request-id="${requestId}"]`);
+                if (panel) panel.remove();
+            }
+        }
         // LANDING PAGE - ROOMS
         // ============================================
 
@@ -866,9 +1030,9 @@
                 }
 
                 roomsList.innerHTML = rooms.map(room => `
-                    <div class="room-item" onclick="joinRoom('${room.roomCode}')">
+                    <div class="room-item" onclick="joinPublicRoom('${room.roomCode}', '${room.roomName}')">
                         <div class="room-item-info">
-                            <div class="room-item-name">${room.roomCode}</div>
+                            <div class="room-item-name">${room.roomName}</div>
                             <span class="room-item-count">${room.participantCount}/${room.capacity}</span>
                         </div>
                         <div class="room-status">
@@ -882,14 +1046,24 @@
             }
         }
 
+        // Join public room directly from the list
+        function joinPublicRoom(roomCode, roomName) {
+            const username = document.getElementById('username').value.trim();
+            if (!username) {
+                showNotification('Please enter your name', true);
+                return;
+            }
+            joinRoomWithUsername(roomCode, username, false);
+        }
+
         async function createRoom() {
             const username = document.getElementById('createUsername').value.trim();
-            const roomCode = document.getElementById('roomCode').value.trim();
+            const roomName = document.getElementById('roomName').value.trim();
             const roomType = document.getElementById('roomType').value;
             const capacity = parseInt(document.getElementById('roomCapacity').value);
 
-            if (!username || !roomCode) {
-                showNotification('Please fill in all fields', true);
+            if (!username || !roomName) {
+                showNotification('Please fill in all required fields', true);
                 return;
             }
 
@@ -898,7 +1072,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        roomCode,
+                        roomName,
                         isPublic: roomType === 'public',
                         capacity
                     })
@@ -911,32 +1085,86 @@
                 }
 
                 const room = await response.json();
-                joinRoomWithUsername(roomCode, username);
+                // Clear form
+                document.getElementById('createUsername').value = '';
+                document.getElementById('roomName').value = '';
+                document.getElementById('roomType').value = 'public';
+                document.getElementById('roomCapacity').value = '10';
+                
+                joinRoomWithUsername(room.roomCode, username, true);
             } catch (error) {
                 console.error('Error creating room:', error);
                 showNotification('Failed to create room', true);
             }
         }
 
-        function joinRoom(roomCode) {
-            const username = document.getElementById('username').value.trim();
-            if (!username) {
-                showNotification('Please enter your name', true);
+        function joinRoomByCode() {
+            const username = document.getElementById('joinUsername').value.trim();
+            const roomCode = document.getElementById('roomCodeInput').value.trim();
+
+            if (!username || !roomCode) {
+                showNotification('Please enter your name and room code', true);
                 return;
             }
-            joinRoomWithUsername(roomCode, username);
+
+            if (!/^\d{6}$/.test(roomCode)) {
+                showNotification('Room code must be exactly 6 digits', true);
+                return;
+            }
+
+            joinRoomWithUsername(roomCode, username, false);
         }
 
-        function joinRoomWithUsername(roomCode, username) {
-            initSocket();
-            currentRoom = roomCode;
-            
-            socket.emit('room:join', {
-                roomCode,
-                username
-            });
+        async function joinRoomWithUsername(roomCode, username, isCreator = false) {
+            try {
+                // Fetch room info to check if it requires approval
+                const roomResponse = await fetch(`/api/rooms/${roomCode}`);
+                if (!roomResponse.ok) {
+                    showNotification('Room not found', true);
+                    return;
+                }
 
-            showRoomPage();
+                const room = await roomResponse.json();
+                currentRoom = roomCode;
+                currentUsername = username;
+
+                // If not creator and room requires approval, show waiting room
+                if (!isCreator && room.requiresApproval) {
+                    showWaitingRoom();
+                    initSocket();
+                    socket.emit('room:join-request', {
+                        roomCode,
+                        username
+                    });
+                } else {
+                    initSocket();
+                    socket.emit('room:join', {
+                        roomCode,
+                        username
+                    });
+                    showRoomPage();
+                }
+            } catch (error) {
+                console.error('Error joining room:', error);
+                showNotification('Failed to join room', true);
+            }
+        }
+
+        function showWaitingRoom() {
+            document.getElementById('landingPage').classList.remove('active');
+            document.getElementById('waitingRoomPage').style.display = 'flex';
+        }
+
+        function cancelJoinRequest() {
+            document.getElementById('landingPage').classList.add('active');
+            document.getElementById('waitingRoomPage').style.display = 'none';
+            if (socket) {
+                socket.emit('room:cancel-join-request', { roomCode: currentRoom });
+                socket.disconnect();
+                socket = null;
+            }
+            currentRoom = null;
+            currentUsername = null;
         }
 
         // ============================================
@@ -968,7 +1196,8 @@
         }
 
         function updateRoomUI(state) {
-            document.getElementById('currentRoomTitle').textContent = state.roomCode;
+            document.getElementById('currentRoomTitle').textContent = state.roomName || 'Study Room';
+            document.getElementById('currentRoomSubtitle').textContent = state.isPublic ? '(Public Room)' : '(Private Room)';
             document.getElementById('roomCodeDisplay').textContent = state.roomCode;
             document.getElementById('participantCountDisplay').textContent = state.participantCount;
             document.getElementById('sessionCountDisplay').textContent = state.timerState.sessionCount + 1;
@@ -976,10 +1205,20 @@
 
         function updateHostInfo() {
             const hostInfo = document.getElementById('hostInfo');
+            const pendingPanel = document.getElementById('pendingRequestsPanel');
+            
             if (isHost) {
                 hostInfo.textContent = '👑 You are the Room Host';
+                // Show pending requests panel for hosts in private rooms
+                if (roomState.requiresApproval && pendingPanel) {
+                    pendingPanel.style.display = 'block';
+                }
             } else {
                 hostInfo.textContent = '📍 You are a participant';
+                // Hide pending requests panel for non-hosts
+                if (pendingPanel) {
+                    pendingPanel.style.display = 'none';
+                }
             }
             
             const timerControls = document.getElementById('timerControls');
