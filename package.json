@@ -1,0 +1,24 @@
+{
+  "name": "virtual-cafe-app",
+  "version": "1.0.0",
+  "description": "A web-based study room platform with synchronized Pomodoro timers and collaborative features",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "study",
+    "pomodoro",
+    "collaboration",
+    "real-time"
+  ],
+  "author": "WBAD Project Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.5.4",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.0"
+  }
+}

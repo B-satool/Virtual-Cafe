@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Café - Study Room</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5e6d3 0%, #e8cdb3 100%);
+            min-height: 100vh;
+            color: #3d3d3d;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: #5c4033;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.5);
+        }
+
+        header p {
+            font-size: 1.1em;
+            color: #8d6e63;
+        }
+
+        /* Landing Page */
+        .landing-page {
+            display: none;
+        }
+
+        .landing-page.active {
+            display: block;
+        }
+
+        .landing-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 40px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .card h2 {
+            color: #5c4033;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        /* Room List */
+        .room-list {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .room-item {
+            background: #f9f5f0;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #d7ccc8;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .room-item:hover {
+            background: #f5f0eb;
+            border-left-color: #a1887f;
+        }
+
+        .room-item-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .room-item-name {
+            font-weight: bold;
+            color: #5c4033;
+        }
+
+        .room-item-count {
+            background: #d7ccc8;
+            color: #3d3d3d;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.85em;
+        }
+
+        .room-status {
+            font-size: 0.85em;
+            color: #8d6e63;
+            margin-top: 5px;
+        }
+
+        .status-studying {
+            color: #d84315;
+        }
+
+        .status-break {
+            color: #4caf50;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #5c4033;
+            font-weight: 600;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #d7ccc8;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #a1887f;
+            background: #faf8f6;
+        }
+
+        /* Buttons */
+        button {
+            background: #6d4c41;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #5d4037;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        button:disabled {
+            background: #b0a0a0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #8d6e63;
+        }
+
+        .btn-secondary:hover {
+            background: #7d5e5a;
+        }
+
+        .btn-danger {
+            background: #d84315;
+        }
+
+        .btn-danger:hover {
+            background: #bf360c;
+        }
+
+        .btn-full-width {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        /* Room Page */
+        .room-page {
+            display: none;
+        }
+
+        .room-page.active {
+            display: block;
+        }
+
+        .room-header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .room-title {
+            color: #5c4033;
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+
+        .room-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .info-box {
+            background: #f9f5f0;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 0.9em;
+            color: #8d6e63;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #5c4033;
+        }
+
+        /* Timer */
+        .timer-container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .timer-mode {
+            font-size: 1.2em;
+            color: #8d6e63;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .timer-mode.study {
+            color: #d84315;
+            font-weight: bold;
+        }
+
+        .timer-mode.break {
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        .timer-display {
+            font-size: 4em;
+            font-weight: bold;
+            color: #5c4033;
+            font-family: 'Courier New', monospace;
+            margin: 30px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .timer-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .timer-controls button {
+            flex: 1;
+            min-width: 100px;
+            max-width: 150px;
+        }
+
+        /* Main Content Grid */
+        .room-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+
+        /* Tasks Section */
+        .tasks-section,
+        .participants-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-title {
+            color: #5c4033;
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #d7ccc8;
+        }
+
+        .add-task-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .add-task-form input {
+            flex: 1;
+        }
+
+        .add-task-form button {
+            flex: 0 0 auto;
+            width: auto;
+            padding: 12px 20px;
+        }
+
+        .task-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .task-item {
+            background: #f9f5f0;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .task-item:hover {
+            background: #f5f0eb;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .task-item.completed {
+            opacity: 0.6;
+        }
+
+        .task-item input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .task-content {
+            flex: 1;
+        }
+
+        .task-text {
+            color: #3d3d3d;
+            word-break: break-word;
+        }
+
+        .task-item.completed .task-text {
+            text-decoration: line-through;
+            color: #8d6e63;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .task-actions button {
+            padding: 6px 10px;
+            font-size: 0.85em;
+            min-width: auto;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #8d6e63;
+            padding: 30px 0;
+            font-style: italic;
+        }
+
+        /* Participants */
+        .participant-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .participant {
+            background: #f9f5f0;
+            padding: 12px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .participant-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #d7ccc8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #5c4033;
+        }
+
+        .participant-info {
+            flex: 1;
+        }
+
+        .participant-name {
+            font-weight: bold;
+            color: #5c4033;
+        }
+
+        .participant-status {
+            font-size: 0.8em;
+            color: #8d6e63;
+        }
+
+        .host-badge {
+            background: #6d4c41;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+        }
+
+        /* Ambient Sound Controls */
+        .ambient-sounds {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+            max-width: 300px;
+        }
+
+        .ambient-title {
+            font-size: 0.95em;
+            color: #5c4033;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .sound-control {
+            margin-bottom: 15px;
+        }
+
+        .sound-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+
+        .sound-label input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .sound-volume {
+            width: 100%;
+            margin-top: 5px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-title {
+            color: #5c4033;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+
+        .modal-content button {
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .landing-content {
+                grid-template-columns: 1fr;
+            }
+
+            .room-content {
+                grid-template-columns: 1fr;
+            }
+
+            .timer-display {
+                font-size: 3em;
+            }
+
+            .ambient-sounds {
+                position: relative;
+                bottom: auto;
+                right: auto;
+                margin-top: 20px;
+                max-width: none;
+            }
+
+            .timer-controls {
+                flex-direction: column;
+            }
+
+            .timer-controls button {
+                max-width: none;
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4caf50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification.error {
+            background: #d84315;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .disabled-controls {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>☕ Virtual Café</h1>
+            <p>Study together, focus better</p>
+        </header>
+
+        <!-- Landing Page -->
+        <div id="landingPage" class="landing-page active">
+            <div class="landing-content">
+                <!-- Join Room -->
+                <div class="card">
+                    <h2>Join a Study Room</h2>
+                    <div class="form-group">
+                        <label for="username">Your Name</label>
+                        <input type="text" id="username" placeholder="Enter your name">
+                    </div>
+                    <div class="room-list" id="publicRoomsList"></div>
+                    <button class="btn-full-width" onclick="loadPublicRooms()">Refresh Available Rooms</button>
+                </div>
+
+                <!-- Create Room -->
+                <div class="card">
+                    <h2>Create a New Room</h2>
+                    <div class="form-group">
+                        <label for="createUsername">Your Name</label>
+                        <input type="text" id="createUsername" placeholder="Enter your name">
+                    </div>
+                    <div class="form-group">
+                        <label for="roomCode">Room Code</label>
+                        <input type="text" id="roomCode" placeholder="e.g., study-group-01">
+                    </div>
+                    <div class="form-group">
+                        <label for="roomType">Room Type</label>
+                        <select id="roomType">
+                            <option value="public">Public (Anyone can join)</option>
+                            <option value="private">Private (Invite only)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="roomCapacity">Room Capacity</label>
+                        <input type="number" id="roomCapacity" value="10" min="1" max="50">
+                    </div>
+                    <button class="btn-full-width" onclick="createRoom()">Create Room</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Room Page -->
+        <div id="roomPage" class="room-page">
+            <button class="btn-secondary" onclick="leaveRoom()" style="margin-bottom: 20px;">← Leave Room</button>
+
+            <!-- Room Header -->
+            <div class="room-header">
+                <div class="room-title" id="currentRoomTitle">Study Room</div>
+                <div class="room-info">
+                    <div class="info-box">
+                        <div class="info-label">Room Code</div>
+                        <div class="info-value" id="roomCodeDisplay">-</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">Participants</div>
+                        <div class="info-value" id="participantCountDisplay">0</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">Session #</div>
+                        <div class="info-value" id="sessionCountDisplay">1</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timer -->
+            <div class="timer-container">
+                <div class="timer-mode" id="timerMode">Study Mode</div>
+                <div class="timer-display" id="timerDisplay">25:00</div>
+                <div class="timer-controls" id="timerControls">
+                    <button onclick="startTimer()">Start</button>
+                    <button onclick="pauseTimer()">Pause</button>
+                    <button onclick="resumeTimer()">Resume</button>
+                    <button onclick="resetTimer()">Reset</button>
+                </div>
+                <div id="hostInfo" style="margin-top: 15px; color: #8d6e63; font-size: 0.9em;"></div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="room-content">
+                <!-- Tasks Section -->
+                <div class="tasks-section">
+                    <h3 class="section-title">📋 Shared Tasks</h3>
+                    <div class="add-task-form">
+                        <input type="text" id="taskInput" placeholder="Add a new task...">
+                        <button onclick="addTask()" class="btn-secondary">Add</button>
+                    </div>
+                    <div class="task-list" id="taskList">
+                        <div class="empty-state">No tasks yet. Start by adding one!</div>
+                    </div>
+                </div>
+
+                <!-- Participants Section -->
+                <div class="participants-section">
+                    <h3 class="section-title">👥 Participants</h3>
+                    <div class="participant-list" id="participantList">
+                        <div class="empty-state">Loading participants...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ambient Sounds -->
+            <div class="ambient-sounds">
+                <div class="ambient-title">🎵 Ambient Sounds</div>
+                <div class="sound-control">
+                    <label class="sound-label">
+                        <input type="checkbox" id="rainSound" onchange="toggleSound('rain')">
+                        Rain ☔
+                    </label>
+                    <input type="range" class="sound-volume" min="0" max="100" value="50" onchange="updateSoundVolume('rain', this.value)">
+                </div>
+                <div class="sound-control">
+                    <label class="sound-label">
+                        <input type="checkbox" id="cafeSound" onchange="toggleSound('cafe')">
+                        Café Chatter ☕
+                    </label>
+                    <input type="range" class="sound-volume" min="0" max="100" value="50" onchange="updateSoundVolume('cafe', this.value)">
+                </div>
+                <div class="sound-control">
+                    <label class="sound-label">
+                        <input type="checkbox" id="fireplaceSound" onchange="toggleSound('fireplace')">
+                        Fireplace 🔥
+                    </label>
+                    <input type="range" class="sound-volume" min="0" max="100" value="50" onchange="updateSoundVolume('fireplace', this.value)">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // ============================================
+        // GLOBAL STATE
+        // ============================================
+
+        let socket = null;
+        let currentRoom = null;
+        let currentUserId = null;
+        let isHost = false;
+        let roomState = {};
+        let soundVolumes = {
+            rain: 50,
+            cafe: 50,
+            fireplace: 50
+        };
+
+        // ============================================
+        // SOCKET INITIALIZATION
+        // ============================================
+
+        function initSocket() {
+            if (socket) return;
+            
+            socket = io();
+
+            socket.on('connect', () => {
+                console.log('Connected to server');
+            });
+
+            socket.on('user:joined', (data) => {
+                updateParticipants(data.participants);
+                isHost = data.isHost;
+                updateHostInfo();
+                showNotification(`${data.username} joined the room`);
+            });
+
+            socket.on('user:left', (data) => {
+                updateParticipants(data.participants);
+                showNotification(`${data.username} left the room`);
+                if (!isHost) {
+                    updateHostInfo();
+                }
+            });
+
+            socket.on('room:state', (state) => {
+                roomState = state;
+                updateRoomUI(state);
+                updateParticipants(state.participants);
+                updateTasks(state.tasks);
+                updateTimer(state.timerState);
+            });
+
+            socket.on('timer:started', (timerState) => {
+                updateTimer(timerState);
+            });
+
+            socket.on('timer:paused', (timerState) => {
+                updateTimer(timerState);
+            });
+
+            socket.on('timer:resumed', (timerState) => {
+                updateTimer(timerState);
+            });
+
+            socket.on('timer:reset', (timerState) => {
+                updateTimer(timerState);
+            });
+
+            socket.on('timer:tick', (timerState) => {
+                updateTimer(timerState);
+            });
+
+            socket.on('timer:transitioned', (timerState) => {
+                updateTimer(timerState);
+                showNotification(`Mode changed to ${timerState.mode === 'study' ? 'Study' : 'Break'}`);
+            });
+
+            socket.on('task:added', (task) => {
+                if (roomState.tasks) {
+                    roomState.tasks.push(task);
+                    updateTasks(roomState.tasks);
+                }
+            });
+
+            socket.on('task:updated', (data) => {
+                if (roomState.tasks) {
+                    const task = roomState.tasks.find(t => t.id === data.taskId);
+                    if (task) {
+                        Object.assign(task, data.updates);
+                        updateTasks(roomState.tasks);
+                    }
+                }
+            });
+
+            socket.on('task:deleted', (data) => {
+                if (roomState.tasks) {
+                    roomState.tasks = roomState.tasks.filter(t => t.id !== data.taskId);
+                    updateTasks(roomState.tasks);
+                }
+            });
+
+            socket.on('error', (data) => {
+                showNotification(data.message, true);
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+            });
+        }
+
+        // ============================================
+        // LANDING PAGE - ROOMS
+        // ============================================
+
+        async function loadPublicRooms() {
+            try {
+                const response = await fetch('/api/rooms/public');
+                const rooms = await response.json();
+                const roomsList = document.getElementById('publicRoomsList');
+
+                if (rooms.length === 0) {
+                    roomsList.innerHTML = '<div class="empty-state">No public rooms available. Create one!</div>';
+                    return;
+                }
+
+                roomsList.innerHTML = rooms.map(room => `
+                    <div class="room-item" onclick="joinRoom('${room.roomCode}')">
+                        <div class="room-item-info">
+                            <div class="room-item-name">${room.roomCode}</div>
+                            <span class="room-item-count">${room.participantCount}/${room.capacity}</span>
+                        </div>
+                        <div class="room-status">
+                            Mode: <span class="status-${room.status}">${room.status}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading rooms:', error);
+                showNotification('Failed to load rooms', true);
+            }
+        }
+
+        async function createRoom() {
+            const username = document.getElementById('createUsername').value.trim();
+            const roomCode = document.getElementById('roomCode').value.trim();
+            const roomType = document.getElementById('roomType').value;
+            const capacity = parseInt(document.getElementById('roomCapacity').value);
+
+            if (!username || !roomCode) {
+                showNotification('Please fill in all fields', true);
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/rooms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        roomCode,
+                        isPublic: roomType === 'public',
+                        capacity
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    showNotification(error.error || 'Failed to create room', true);
+                    return;
+                }
+
+                const room = await response.json();
+                joinRoomWithUsername(roomCode, username);
+            } catch (error) {
+                console.error('Error creating room:', error);
+                showNotification('Failed to create room', true);
+            }
+        }
+
+        function joinRoom(roomCode) {
+            const username = document.getElementById('username').value.trim();
+            if (!username) {
+                showNotification('Please enter your name', true);
+                return;
+            }
+            joinRoomWithUsername(roomCode, username);
+        }
+
+        function joinRoomWithUsername(roomCode, username) {
+            initSocket();
+            currentRoom = roomCode;
+            
+            socket.emit('room:join', {
+                roomCode,
+                username
+            });
+
+            showRoomPage();
+        }
+
+        // ============================================
+        // ROOM PAGE
+        // ============================================
+
+        function showRoomPage() {
+            document.getElementById('landingPage').classList.remove('active');
+            document.getElementById('roomPage').classList.add('active');
+        }
+
+        function leaveRoom() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+            currentRoom = null;
+            currentUserId = null;
+            isHost = false;
+            roomState = {};
+
+            document.getElementById('roomPage').classList.remove('active');
+            document.getElementById('landingPage').classList.add('active');
+            
+            // Clear room-specific data
+            document.getElementById('taskInput').value = '';
+            document.getElementById('taskList').innerHTML = '';
+            document.getElementById('participantList').innerHTML = '';
+        }
+
+        function updateRoomUI(state) {
+            document.getElementById('currentRoomTitle').textContent = state.roomCode;
+            document.getElementById('roomCodeDisplay').textContent = state.roomCode;
+            document.getElementById('participantCountDisplay').textContent = state.participantCount;
+            document.getElementById('sessionCountDisplay').textContent = state.timerState.sessionCount + 1;
+        }
+
+        function updateHostInfo() {
+            const hostInfo = document.getElementById('hostInfo');
+            if (isHost) {
+                hostInfo.textContent = '👑 You are the Room Host';
+            } else {
+                hostInfo.textContent = '📍 You are a participant';
+            }
+            
+            const timerControls = document.getElementById('timerControls');
+            if (!isHost) {
+                timerControls.classList.add('disabled-controls');
+            } else {
+                timerControls.classList.remove('disabled-controls');
+            }
+        }
+
+        // ============================================
+        // TIMER MANAGEMENT
+        // ============================================
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function updateTimer(timerState) {
+            document.getElementById('timerDisplay').textContent = formatTime(timerState.timeRemaining);
+            
+            const timerMode = document.getElementById('timerMode');
+            timerMode.textContent = timerState.mode === 'study' ? '📚 Study Mode' : '☕ Break Time';
+            timerMode.className = `timer-mode ${timerState.mode}`;
+        }
+
+        function startTimer() {
+            if (!isHost) {
+                showNotification('Only the host can start the timer', true);
+                return;
+            }
+            socket.emit('timer:start');
+        }
+
+        function pauseTimer() {
+            if (!isHost) return;
+            socket.emit('timer:pause');
+        }
+
+        function resumeTimer() {
+            if (!isHost) return;
+            socket.emit('timer:resume');
+        }
+
+        function resetTimer() {
+            if (!isHost) return;
+            socket.emit('timer:reset');
+        }
+
+        // ============================================
+        // TASK MANAGEMENT
+        // ============================================
+
+        function addTask() {
+            const input = document.getElementById('taskInput');
+            const title = input.value.trim();
+
+            if (!title) {
+                showNotification('Please enter a task', true);
+                return;
+            }
+
+            socket.emit('task:add', { title });
+            input.value = '';
+        }
+
+        function updateTaskCompletion(taskId) {
+            const task = roomState.tasks.find(t => t.id === taskId);
+            if (task) {
+                socket.emit('task:update', {
+                    taskId,
+                    updates: { completed: !task.completed }
+                });
+            }
+        }
+
+        function deleteTask(taskId) {
+            socket.emit('task:delete', { taskId });
+        }
+
+        function updateTasks(tasks) {
+            const taskList = document.getElementById('taskList');
+
+            if (tasks.length === 0) {
+                taskList.innerHTML = '<div class="empty-state">No tasks yet. Start by adding one!</div>';
+                return;
+            }
+
+            taskList.innerHTML = tasks.map(task => `
+                <div class="task-item ${task.completed ? 'completed' : ''}">
+                    <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="updateTaskCompletion('${task.id}')">
+                    <div class="task-content">
+                        <div class="task-text">${escapeHtml(task.title)}</div>
+                    </div>
+                    <div class="task-actions">
+                        <button class="btn-danger" onclick="deleteTask('${task.id}')">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateParticipants(participants) {
+            const participantList = document.getElementById('participantList');
+
+            if (participants.length === 0) {
+                participantList.innerHTML = '<div class="empty-state">No participants</div>';
+                return;
+            }
+
+            participantList.innerHTML = participants.map(p => `
+                <div class="participant">
+                    <div class="participant-avatar">${p.username.charAt(0).toUpperCase()}</div>
+                    <div class="participant-info">
+                        <div class="participant-name">${escapeHtml(p.username)}</div>
+                        <div class="participant-status">${p.isHost ? '👑 Host' : 'Member'}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // ============================================
+        // AMBIENT SOUNDS
+        // ============================================
+
+        function toggleSound(soundType) {
+            const checkbox = document.getElementById(soundType + 'Sound');
+            if (checkbox.checked) {
+                playSound(soundType);
+            } else {
+                stopSound(soundType);
+            }
+        }
+
+        function updateSoundVolume(soundType, volume) {
+            soundVolumes[soundType] = volume;
+            // In a real implementation, this would adjust the audio element's volume
+            console.log(`${soundType} volume set to ${volume}%`);
+        }
+
+        function playSound(soundType) {
+            // In a real implementation, this would play the audio
+            showNotification(`♪ Playing ${soundType} sound`, false);
+            console.log(`Playing ${soundType} ambient sound at ${soundVolumes[soundType]}% volume`);
+        }
+
+        function stopSound(soundType) {
+            console.log(`Stopped ${soundType} ambient sound`);
+        }
+
+        // ============================================
+        // UTILITIES
+        // ============================================
+
+        function showNotification(message, isError = false) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${isError ? 'error' : ''}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPublicRooms();
+
+            // Allow Enter key to add tasks
+            document.getElementById('taskInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    addTask();
+                }
+            });
+
+            // Allow Enter key to join room
+            document.getElementById('username').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const roomCode = document.getElementById('publicRoomsList').querySelector('.room-item');
+                    if (roomCode) roomCode.click();
+                }
+            });
+
+            // Allow Enter key to create room
+            document.getElementById('roomCode').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    createRoom();
+                }
+            });
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (socket) {
+                socket.disconnect();
+            }
+        });
+    </script>
+</body>
+</html>
