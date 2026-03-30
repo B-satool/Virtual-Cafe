@@ -1,9 +1,13 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+
+// Import database functions
+const db = require('./src/database');
 
 const app = express();
 const server = http.createServer(app);
@@ -20,116 +24,67 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================
-// DATA STRUCTURES
+// IN-MEMORY CACHE (for real-time updates)
 // ============================================
 
-// Store all rooms and their state
-const rooms = new Map();
-
-// Timer intervals for each room
-const timerIntervals = new Map();
+// Store active room sessions in memory for real-time sync
+const activeRooms = new Map(); // roomId -> { timerState, participants, tasks }
+const timerIntervals = new Map(); // roomId -> intervalId
 
 // ============================================
-// ROOM CLASS
+// HELPER FUNCTIONS
 // ============================================
 
-class StudyRoom {
-  constructor(roomCode, isPublic = true, capacity = 10) {
-    this.id = uuidv4();
-    this.roomCode = roomCode;
-    this.isPublic = isPublic;
-    this.capacity = capacity;
-    this.participants = new Map(); // userId -> {username, joinedAt, isHost}
-    this.tasks = []; // Array of task objects
-    this.timerState = {
+async function initializeRoom(roomId) {
+  // Get room data from database
+  const roomResult = await db.getRoomById(roomId);
+  if (!roomResult.success || !roomResult.room) return null;
+
+  const participantsResult = await db.getParticipants(roomId);
+  const tasksResult = await db.getTasks(roomId);
+  const timerResult = await db.getLatestTimerState(roomId);
+
+  const room = {
+    id: roomResult.room.id,
+    roomCode: roomResult.room.room_code,
+    isPublic: roomResult.room.is_public,
+    capacity: roomResult.room.capacity,
+    participants: participantsResult.success ? participantsResult.participants : [],
+    tasks: tasksResult.success ? tasksResult.tasks : [],
+    timerState: timerResult.success && timerResult.timerState ? {
+      isRunning: timerResult.timerState.is_running,
+      mode: timerResult.timerState.mode,
+      timeRemaining: timerResult.timerState.time_remaining,
+      totalTime: timerResult.timerState.total_time,
+      startedAt: timerResult.timerState.started_at,
+      pausedAt: timerResult.timerState.paused_at,
+      sessionCount: timerResult.timerState.session_count
+    } : {
       isRunning: false,
-      mode: 'study', // 'study' or 'break'
-      timeRemaining: 25 * 60, // Start with 25 minutes in seconds
+      mode: 'study',
+      timeRemaining: 25 * 60,
       totalTime: 25 * 60,
       startedAt: null,
       pausedAt: null,
       sessionCount: 0
-    };
-    this.createdAt = new Date();
-    this.lastActivityAt = new Date();
-  }
-
-  addParticipant(userId, username, isHost = false) {
-    this.participants.set(userId, {
-      username,
-      joinedAt: new Date(),
-      isHost
-    });
-    this.lastActivityAt = new Date();
-  }
-
-  removeParticipant(userId) {
-    this.participants.delete(userId);
-    this.lastActivityAt = new Date();
-    
-    // If host left, assign new host if participants exist
-    if (this.participants.size > 0) {
-      const currentHost = Array.from(this.participants.entries()).find(([_, p]) => p.isHost);
-      if (!currentHost) {
-        const firstParticipant = this.participants.entries().next();
-        if (!firstParticipant.done) {
-          firstParticipant.value[1].isHost = true;
-        }
-      }
     }
-  }
+  };
 
-  addTask(taskId, title, userId) {
-    this.tasks.push({
-      id: taskId,
-      title,
-      completed: false,
-      createdBy: userId,
-      createdAt: new Date()
-    });
-    this.lastActivityAt = new Date();
-  }
+  activeRooms.set(roomId, room);
+  return room;
+}
 
-  updateTask(taskId, updates) {
-    const task = this.tasks.find(t => t.id === taskId);
-    if (task) {
-      Object.assign(task, updates);
-      this.lastActivityAt = new Date();
-    }
-  }
-
-  deleteTask(taskId) {
-    this.tasks = this.tasks.filter(t => t.id !== taskId);
-    this.lastActivityAt = new Date();
-  }
-
-  getPublicInfo() {
-    return {
-      id: this.id,
-      roomCode: this.roomCode,
-      isPublic: this.isPublic,
-      participantCount: this.participants.size,
-      capacity: this.capacity,
-      status: this.timerState.mode,
-      createdAt: this.createdAt
-    };
-  }
-
-  getFullState() {
-    return {
-      id: this.id,
-      roomCode: this.roomCode,
-      isPublic: this.isPublic,
-      capacity: this.capacity,
-      participants: Array.from(this.participants.entries()).map(([userId, info]) => ({
-        userId,
-        ...info
-      })),
-      tasks: this.tasks,
-      timerState: this.timerState,
-      participantCount: this.participants.size
-    };
-  }
+function getRoomFullState(room) {
+  return {
+    id: room.id,
+    roomCode: room.roomCode,
+    isPublic: room.isPublic,
+    capacity: room.capacity,
+    participants: room.participants,
+    tasks: room.tasks,
+    timerState: room.timerState,
+    participantCount: room.participants.length
+  };
 }
 
 // ============================================
@@ -137,14 +92,13 @@ class StudyRoom {
 // ============================================
 
 function startRoomTimer(roomId) {
-  const room = rooms.get(roomId);
+  const room = activeRooms.get(roomId);
   if (!room) return;
 
   room.timerState.isRunning = true;
-  room.timerState.startedAt = Date.now();
+  room.timerState.startedAt = new Date().toISOString();
   room.timerState.pausedAt = null;
 
-  // Notify all participants
   io.to(roomId).emit('timer:started', room.timerState);
 
   // Clear existing interval if any
@@ -152,9 +106,9 @@ function startRoomTimer(roomId) {
     clearInterval(timerIntervals.get(roomId));
   }
 
-  // Set up timer interval (update every second)
-  const interval = setInterval(() => {
-    const room = rooms.get(roomId);
+  // Set up timer interval
+  const interval = setInterval(async () => {
+    const room = activeRooms.get(roomId);
     if (!room) {
       clearInterval(interval);
       timerIntervals.delete(roomId);
@@ -165,7 +119,6 @@ function startRoomTimer(roomId) {
       room.timerState.timeRemaining -= 1;
       io.to(roomId).emit('timer:tick', room.timerState);
 
-      // Timer finished
       if (room.timerState.timeRemaining === 0) {
         transitionTimerMode(roomId);
       }
@@ -176,31 +129,31 @@ function startRoomTimer(roomId) {
 }
 
 function pauseRoomTimer(roomId) {
-  const room = rooms.get(roomId);
+  const room = activeRooms.get(roomId);
   if (!room) return;
 
   room.timerState.isRunning = false;
-  room.timerState.pausedAt = Date.now();
+  room.timerState.pausedAt = new Date().toISOString();
 
   io.to(roomId).emit('timer:paused', room.timerState);
 }
 
 function resumeRoomTimer(roomId) {
-  const room = rooms.get(roomId);
+  const room = activeRooms.get(roomId);
   if (!room) return;
 
   room.timerState.isRunning = true;
-  room.timerState.startedAt = Date.now() - (room.timerState.totalTime - room.timerState.timeRemaining) * 1000;
+  const elapsedSeconds = (new Date() - new Date(room.timerState.startedAt)) / 1000;
+  room.timerState.startedAt = new Date(Date.now() - (room.timerState.totalTime - room.timerState.timeRemaining) * 1000).toISOString();
   room.timerState.pausedAt = null;
 
   io.to(roomId).emit('timer:resumed', room.timerState);
 }
 
 function resetRoomTimer(roomId) {
-  const room = rooms.get(roomId);
+  const room = activeRooms.get(roomId);
   if (!room) return;
 
-  // Set time based on mode
   const studyTime = 25 * 60;
   const breakTime = 5 * 60;
   const totalTime = room.timerState.mode === 'study' ? studyTime : breakTime;
@@ -215,27 +168,36 @@ function resetRoomTimer(roomId) {
 }
 
 function transitionTimerMode(roomId) {
-  const room = rooms.get(roomId);
+  const room = activeRooms.get(roomId);
   if (!room) return;
 
-  // Switch mode
   if (room.timerState.mode === 'study') {
     room.timerState.mode = 'break';
-    room.timerState.timeRemaining = 5 * 60; // 5 minute break
+    room.timerState.timeRemaining = 5 * 60;
     room.timerState.totalTime = 5 * 60;
     room.timerState.sessionCount += 1;
   } else {
     room.timerState.mode = 'study';
-    room.timerState.timeRemaining = 25 * 60; // 25 minute study
+    room.timerState.timeRemaining = 25 * 60;
     room.timerState.totalTime = 25 * 60;
   }
 
   room.timerState.isRunning = true;
-  room.timerState.startedAt = Date.now();
+  room.timerState.startedAt = new Date().toISOString();
   room.timerState.pausedAt = null;
 
-  // Notify all participants
   io.to(roomId).emit('timer:transitioned', room.timerState);
+  
+  // Save to database
+  db.saveTimerState(roomId, {
+    isRunning: room.timerState.isRunning,
+    mode: room.timerState.mode,
+    timeRemaining: room.timerState.timeRemaining,
+    totalTime: room.timerState.totalTime,
+    startedAt: room.timerState.startedAt,
+    pausedAt: room.timerState.pausedAt,
+    sessionCount: room.timerState.sessionCount
+  });
 }
 
 // ============================================
@@ -247,42 +209,83 @@ app.get('/', (req, res) => {
 });
 
 // Get all public rooms
-app.get('/api/rooms/public', (req, res) => {
-  const publicRooms = Array.from(rooms.values())
-    .filter(room => room.isPublic)
-    .map(room => room.getPublicInfo());
+app.get('/api/rooms/public', async (req, res) => {
+  const result = await db.getPublicRooms();
+  
+  if (!result.success) {
+    return res.status(500).json({ error: result.error });
+  }
+
+  const publicRooms = result.rooms.map(room => {
+    const activeRoom = activeRooms.get(room.id);
+    return {
+      id: room.id,
+      roomCode: room.room_code,
+      isPublic: room.is_public,
+      participantCount: activeRoom ? activeRoom.participants.length : 0,
+      capacity: room.capacity,
+      status: activeRoom ? activeRoom.timerState.mode : 'study',
+      createdAt: room.created_at
+    };
+  });
+
   res.json(publicRooms);
 });
 
 // Create a new room
-app.post('/api/rooms', (req, res) => {
+app.post('/api/rooms', async (req, res) => {
   const { roomCode, isPublic = true, capacity = 10 } = req.body;
 
+  if (!roomCode || roomCode.trim() === '') {
+    return res.status(400).json({ error: 'Room code is required' });
+  }
+
   // Check if room code already exists
-  if (Array.from(rooms.values()).some(r => r.roomCode === roomCode)) {
+  const existsResult = await db.checkRoomExists(roomCode);
+  if (!existsResult.success) {
+    return res.status(500).json({ error: 'Database error' });
+  }
+
+  if (existsResult.exists) {
     return res.status(400).json({ error: 'Room code already exists' });
   }
 
-  const room = new StudyRoom(roomCode, isPublic, capacity);
-  rooms.set(room.id, room);
+  // Create room
+  const createResult = await db.createRoom(roomCode, isPublic, capacity);
+  if (!createResult.success) {
+    return res.status(500).json({ error: createResult.error });
+  }
+
+  // Initialize in-memory cache
+  await initializeRoom(createResult.room.id);
 
   res.status(201).json({
-    id: room.id,
-    roomCode: room.roomCode,
-    isPublic: room.isPublic,
-    capacity: room.capacity
+    id: createResult.room.id,
+    roomCode: createResult.room.room_code,
+    isPublic: createResult.room.is_public,
+    capacity: createResult.room.capacity
   });
 });
 
 // Get room by code
-app.get('/api/rooms/:roomCode', (req, res) => {
-  const room = Array.from(rooms.values()).find(r => r.roomCode === req.params.roomCode);
+app.get('/api/rooms/:roomCode', async (req, res) => {
+  const codeResult = await db.getRoomByCode(req.params.roomCode);
 
-  if (!room) {
+  if (!codeResult.success || !codeResult.room) {
     return res.status(404).json({ error: 'Room not found' });
   }
 
-  res.json(room.getPublicInfo());
+  const activeRoom = activeRooms.get(codeResult.room.id);
+
+  res.json({
+    id: codeResult.room.id,
+    roomCode: codeResult.room.room_code,
+    isPublic: codeResult.room.is_public,
+    participantCount: activeRoom ? activeRoom.participants.length : 0,
+    capacity: codeResult.room.capacity,
+    status: activeRoom ? activeRoom.timerState.mode : 'study',
+    createdAt: codeResult.room.created_at
+  });
 });
 
 // ============================================
@@ -293,71 +296,112 @@ io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
   // User joins a room
-  socket.on('room:join', (data) => {
+  socket.on('room:join', async (data) => {
     const { roomCode, username } = data;
-    const room = Array.from(rooms.values()).find(r => r.roomCode === roomCode);
-
-    if (!room) {
+    
+    // Get room from database
+    const roomResult = await db.getRoomByCode(roomCode);
+    if (!roomResult.success || !roomResult.room) {
       socket.emit('error', { message: 'Room not found' });
       return;
     }
 
-    if (room.participants.size >= room.capacity) {
+    const roomId = roomResult.room.id;
+
+    // Initialize room if not already in cache
+    if (!activeRooms.has(roomId)) {
+      await initializeRoom(roomId);
+    }
+
+    const room = activeRooms.get(roomId);
+
+    // Check capacity
+    if (room.participants.length >= room.capacity) {
       socket.emit('error', { message: 'Room is full' });
       return;
     }
 
-    // Add user to room
-    const isHost = room.participants.size === 0; // First participant is host
-    room.addParticipant(socket.id, username, isHost);
+    // Add participant to database
+    const isHost = room.participants.length === 0;
+    const participantResult = await db.addParticipant(roomId, socket.id, username, isHost);
+
+    if (!participantResult.success) {
+      socket.emit('error', { message: 'Failed to join room' });
+      return;
+    }
+
+    // Update in-memory cache
+    room.participants.push({
+      userId: socket.id,
+      username: username,
+      joinedAt: participantResult.participant.joined_at,
+      isHost: isHost
+    });
 
     // Join socket to room
-    socket.join(room.id);
-    socket.data.roomId = room.id;
+    socket.join(roomId);
+    socket.data.roomId = roomId;
     socket.data.userId = socket.id;
     socket.data.username = username;
+    socket.data.isHost = isHost;
+
+    // Log activity
+    await db.logActivity(roomId, 'user_joined', socket.id, username);
 
     // Notify all users in room
-    io.to(room.id).emit('user:joined', {
+    io.to(roomId).emit('user:joined', {
       userId: socket.id,
-      username,
-      isHost,
-      participants: Array.from(room.participants.entries()).map(([userId, info]) => ({
-        userId,
-        ...info
-      }))
+      username: username,
+      isHost: isHost,
+      participants: room.participants
     });
 
     // Send current room state to the user
-    socket.emit('room:state', room.getFullState());
+    socket.emit('room:state', getRoomFullState(room));
 
     console.log(`${username} joined room ${roomCode}`);
   });
 
   // User leaves a room
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     if (socket.data.roomId) {
-      const room = rooms.get(socket.data.roomId);
+      const room = activeRooms.get(socket.data.roomId);
       if (room) {
         const username = socket.data.username;
-        room.removeParticipant(socket.id);
+
+        // Remove from database
+        await db.removeParticipant(socket.data.roomId, socket.id);
+
+        // Update in-memory cache
+        room.participants = room.participants.filter(p => p.userId !== socket.id);
+
+        // Log activity
+        await db.logActivity(socket.data.roomId, 'user_left', socket.id, username);
 
         io.to(room.id).emit('user:left', {
           userId: socket.id,
-          username,
-          participants: Array.from(room.participants.entries()).map(([userId, info]) => ({
-            userId,
-            ...info
-          }))
+          username: username,
+          participants: room.participants
         });
 
+        // Handle host change
+        if (socket.data.isHost && room.participants.length > 0) {
+          const newHost = room.participants[0];
+          await db.setHostStatus(room.id, newHost.userId, true);
+          newHost.isHost = true;
+          io.to(room.id).emit('host:changed', {
+            newHostId: newHost.userId,
+            newHostName: newHost.username
+          });
+        }
+
         // Clean up empty rooms
-        if (room.participants.size === 0) {
+        if (room.participants.length === 0) {
           if (timerIntervals.has(room.id)) {
             clearInterval(timerIntervals.get(room.id));
             timerIntervals.delete(room.id);
           }
-          rooms.delete(room.id);
+          activeRooms.delete(room.id);
         }
 
         console.log(`${username} left room`);
@@ -371,84 +415,108 @@ io.on('connection', (socket) => {
 
   socket.on('timer:start', () => {
     if (!socket.data.roomId) return;
-    const room = rooms.get(socket.data.roomId);
-    if (room && room.participants.get(socket.id)?.isHost) {
+    const room = activeRooms.get(socket.data.roomId);
+    if (room && socket.data.isHost) {
       startRoomTimer(socket.data.roomId);
     }
   });
 
   socket.on('timer:pause', () => {
     if (!socket.data.roomId) return;
-    const room = rooms.get(socket.data.roomId);
-    if (room && room.participants.get(socket.id)?.isHost) {
+    const room = activeRooms.get(socket.data.roomId);
+    if (room && socket.data.isHost) {
       pauseRoomTimer(socket.data.roomId);
     }
   });
 
   socket.on('timer:resume', () => {
     if (!socket.data.roomId) return;
-    const room = rooms.get(socket.data.roomId);
-    if (room && room.participants.get(socket.id)?.isHost) {
+    const room = activeRooms.get(socket.data.roomId);
+    if (room && socket.data.isHost) {
       resumeRoomTimer(socket.data.roomId);
     }
   });
 
   socket.on('timer:reset', () => {
     if (!socket.data.roomId) return;
-    const room = rooms.get(socket.data.roomId);
-    if (room && room.participants.get(socket.id)?.isHost) {
+    const room = activeRooms.get(socket.data.roomId);
+    if (room && socket.data.isHost) {
       resetRoomTimer(socket.data.roomId);
     }
   });
 
   // ============ TASK MANAGEMENT ============
 
-  socket.on('task:add', (data) => {
+  socket.on('task:add', async (data) => {
     if (!socket.data.roomId) return;
-    const room = rooms.get(socket.data.roomId);
+    const room = activeRooms.get(socket.data.roomId);
     if (!room) return;
 
-    const taskId = uuidv4();
-    room.addTask(taskId, data.title, socket.id);
+    const taskResult = await db.addTask(socket.data.roomId, data.title, socket.id);
+    if (!taskResult.success) return;
 
-    io.to(room.id).emit('task:added', {
-      id: taskId,
-      title: data.title,
-      completed: false,
-      createdBy: socket.id,
-      createdAt: new Date()
-    });
+    const task = {
+      id: taskResult.task.id,
+      title: taskResult.task.title,
+      completed: taskResult.task.completed,
+      createdBy: taskResult.task.created_by,
+      createdAt: taskResult.task.created_at
+    };
+
+    room.tasks.push(task);
+
+    io.to(room.id).emit('task:added', task);
+    await db.logActivity(room.id, 'task_added', socket.id, socket.data.username, { taskTitle: data.title });
   });
 
-  socket.on('task:update', (data) => {
+  socket.on('task:update', async (data) => {
     if (!socket.data.roomId) return;
-    const room = rooms.get(socket.data.roomId);
+    const room = activeRooms.get(socket.data.roomId);
     if (!room) return;
 
-    room.updateTask(data.taskId, data.updates);
+    const updates = {};
+    if (data.updates.completed !== undefined) updates.completed = data.updates.completed;
+    if (data.updates.title !== undefined) updates.title = data.updates.title;
+
+    const taskResult = await db.updateTask(data.taskId, updates);
+    if (!taskResult.success) return;
+
+    const taskIndex = room.tasks.findIndex(t => t.id === data.taskId);
+    if (taskIndex !== -1) {
+      Object.assign(room.tasks[taskIndex], data.updates);
+    }
+
     io.to(room.id).emit('task:updated', {
       taskId: data.taskId,
       updates: data.updates
     });
+
+    await db.logActivity(room.id, 'task_updated', socket.id, socket.data.username, { taskId: data.taskId });
   });
 
-  socket.on('task:delete', (data) => {
+  socket.on('task:delete', async (data) => {
     if (!socket.data.roomId) return;
-    const room = rooms.get(socket.data.roomId);
+    const room = activeRooms.get(socket.data.roomId);
     if (!room) return;
 
-    room.deleteTask(data.taskId);
+    const deleteResult = await db.deleteTask(data.taskId);
+    if (!deleteResult.success) return;
+
+    room.tasks = room.tasks.filter(t => t.id !== data.taskId);
+
     io.to(room.id).emit('task:deleted', {
       taskId: data.taskId
     });
+
+    await db.logActivity(room.id, 'task_deleted', socket.id, socket.data.username, { taskId: data.taskId });
   });
 
   // Request full room state
   socket.on('room:requestState', () => {
     if (!socket.data.roomId) return;
-    const room = rooms.get(socket.data.roomId);
+    const room = activeRooms.get(socket.data.roomId);
     if (room) {
-      socket.emit('room:state', room.getFullState());
+      socket.emit('room:state', getRoomFullState(room));
     }
   });
 });
@@ -460,4 +528,14 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Virtual Café server running on http://localhost:${PORT}`);
+  console.log(`Supabase URL: ${process.env.SUPABASE_URL}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 });
