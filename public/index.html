@@ -1655,6 +1655,19 @@
                 }
             });
 
+            // Room closed by host leaving
+            socket.on('room:closed', (data) => {
+                showNotification(data.message || 'Room has been closed', true);
+                // Return to landing page
+                setTimeout(() => {
+                    currentRoom = null;
+                    currentUsername = null;
+                    socket.disconnect();
+                    showLandingPage();
+                    loadPublicRooms();
+                }, 1500);
+            });
+
             socket.on('disconnect', () => {
                 console.log('Disconnected from server');
             });
@@ -1762,6 +1775,12 @@
             }
 
             try {
+                const userId = localStorage.getItem('userId');
+                if (!userId) {
+                    showNotification('Session expired. Please log in again.', true);
+                    return;
+                }
+
                 const response = await fetch('/api/rooms', {
                     method: 'POST',
                     headers: getHeaders(true),
@@ -1770,7 +1789,7 @@
                         isPublic: roomType === 'public',
                         requiresApproval: roomType === 'private',
                         capacity,
-                        createdBy: document.getElementById('currentUserDisplay').textContent || 'Anonymous'
+                        createdBy: userId
                     })
                 });
 
@@ -1893,11 +1912,19 @@
         }
 
         function updateRoomUI(state) {
-            document.getElementById('currentRoomTitle').textContent = state.roomName || 'Study Room';
-            document.getElementById('currentRoomSubtitle').textContent = state.isPublic ? '(Public Room)' : '(Private Room)';
-            document.getElementById('roomCodeDisplay').textContent = state.roomCode;
-            document.getElementById('participantCountDisplay').textContent = state.participantCount;
-            document.getElementById('sessionCountDisplay').textContent = state.timerState.sessionCount + 1;
+            // Handle both camelCase and snake_case room properties
+            const room = state.room || state;
+            const roomName = room.room_name || room.roomName || 'Study Room';
+            const roomCode = room.room_code || room.roomCode || currentRoom;
+            const isPublic = room.is_public !== undefined ? room.is_public : (room.isPublic || false);
+            const participantCount = state.participants ? state.participants.length : (state.participantCount || 0);
+            const timerState = state.timerState || state.timer || {};
+            
+            document.getElementById('currentRoomTitle').textContent = roomName;
+            document.getElementById('currentRoomSubtitle').textContent = isPublic ? '(Public Room)' : '(Private Room)';
+            document.getElementById('roomCodeDisplay').textContent = roomCode;
+            document.getElementById('participantCountDisplay').textContent = participantCount;
+            document.getElementById('sessionCountDisplay').textContent = (timerState.sessionCount || 0) + 1;
         }
 
         function updateHostInfo() {

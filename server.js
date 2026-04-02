@@ -563,11 +563,26 @@ io.on('connection', (socket) => {
             // Get room
             const roomResult = await db.getRoomByCode(roomCode);
             if (roomResult.success) {
+                const room = roomResult.result;
+                
                 // Remove participant
-                await db.removeParticipant(roomResult.result.id, userId);
+                await db.removeParticipant(room.id, userId);
 
-                // Notify others
-                socket.to(roomCode).emit('participant:left', { userId });
+                // Check if the leaving user is the host
+                const participantsResult = await db.getParticipants(room.id);
+                const participants = participantsResult.result || [];
+                const hostParticipant = participants.find(p => p.is_host);
+
+                // If the user leaving was the host, delete the room
+                if (hostParticipant && hostParticipant.user_id === userId) {
+                    await db.deleteRoom(room.id);
+                    io.to(roomCode).emit('room:closed', { 
+                        message: 'Room host has left. Room is now closed.' 
+                    });
+                } else {
+                    // Notify others that a participant left
+                    socket.to(roomCode).emit('participant:left', { userId });
+                }
             }
 
             socket.leave(roomCode);
@@ -702,9 +717,25 @@ io.on('connection', (socket) => {
             if (socket.roomCode && socket.userId) {
                 const roomResult = await db.getRoomByCode(socket.roomCode);
                 if (roomResult.success) {
-                    await db.removeParticipant(roomResult.result.id, socket.userId);
+                    const room = roomResult.result;
+                    await db.removeParticipant(room.id, socket.userId);
+
+                    // Check if the disconnected user is the host
+                    const participantsResult = await db.getParticipants(room.id);
+                    const participants = participantsResult.result || [];
+                    const hostParticipant = participants.find(p => p.is_host);
+
+                    // If the host disconnected, delete the room
+                    if (hostParticipant && hostParticipant.user_id === socket.userId) {
+                        await db.deleteRoom(room.id);
+                        io.to(socket.roomCode).emit('room:closed', { 
+                            message: 'Room host has disconnected. Room is now closed.' 
+                        });
+                    } else {
+                        // Notify others that a participant left
+                        socket.to(socket.roomCode).emit('participant:left', { userId: socket.userId });
+                    }
                 }
-                socket.to(socket.roomCode).emit('participant:left', { userId: socket.userId });
             }
             console.log(`User disconnected: ${socket.id}`);
         } catch (error) {
