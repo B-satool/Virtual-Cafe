@@ -1,545 +1,629 @@
-/**
- * Supabase Database Configuration and Query Utilities
- * Handles all database operations for Virtual Café
- */
-
+// Database module for Supabase interactions
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY in .env');
-}
-
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// =============================================
-// ROOMS OPERATIONS
-// =============================================
+// ============================================
+// AUTHENTICATION FUNCTIONS
+// ============================================
 
-async function createRoom(roomCode, roomName, isPublic = true, capacity = 10, requiresApproval = false, createdBy = null) {
-  try {
-    const { data, error } = await supabase
-      .from('rooms')
-      .insert([
-        {
-          room_code: roomCode,
-          room_name: roomName,
-          is_public: isPublic,
-          requires_approval: requiresApproval,
-          capacity: capacity,
-          created_by: createdBy
+async function signUp(email, password, fullName) {
+    try {
+        // Create user with Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                emailRedirectTo: `${process.env.APP_URL || 'http://localhost:3001'}/auth/callback`,
+                data: {
+                    full_name: fullName
+                }
+            }
+        });
+
+        if (authError) {
+            return { success: false, error: authError.message };
         }
-      ])
-      .select()
-      .single();
 
-    if (error) throw error;
-    return { success: true, room: data };
-  } catch (error) {
-    console.error('Error creating room:', error.message);
-    return { success: false, error: error.message };
-  }
+        const userId = authData.user.id;
+
+        // Create user profile in database
+        // Use .insert() instead of .upsert() to catch duplicates
+        const { data: profileData, error: profileError } = await supabase
+            .from('user_profiles')
+            .insert([{
+                id: userId,
+                email,
+                full_name: fullName,
+                avatar_url: null
+            }], { onConflict: 'id' });
+
+        if (profileError && !profileError.message.includes('duplicate')) {
+            // Log the error but don't return - user was created in auth
+            console.error('Profile creation error:', profileError.message);
+        }
+
+        // For development: if email confirmation is required, allow login anyway
+        // Production should enforce email confirmation
+        const { data: { session } } = await supabase.auth.getSession();
+
+        return {
+            success: true,
+            userId,
+            accessToken: session?.access_token,
+            refreshToken: session?.refresh_token,
+            user: authData.user,
+            emailConfirmationRequired: authData.user?.email_confirmed_at === null
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function logIn(email, password) {
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return {
+            success: true,
+            userId: data.user.id,
+            accessToken: data.session?.access_token,
+            refreshToken: data.session?.refresh_token
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function logOut() {
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            return { success: false, error: error.message };
+        }
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function verifyToken(token) {
+    try {
+        const { data, error } = await supabase.auth.getUser(token);
+        if (error) {
+            return { success: false, error: error.message };
+        }
+        return { success: true, user: data.user };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ============================================
+// USER PROFILE FUNCTIONS
+// ============================================
+
+async function getUserProfile(userId) {
+    try {
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function updateUserProfile(userId, updates) {
+    try {
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .update(updates)
+            .eq('id', userId)
+            .select();
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ============================================
+// ROOM FUNCTIONS
+// ============================================
+
+async function createRoom(roomName, isPublic, roomCode, requiresApproval, capacity, createdBy) {
+    try {
+        const { data, error } = await supabase
+            .from('rooms')
+            .insert([{
+                room_name: roomName,
+                is_public: isPublic,
+                room_code: roomCode,
+                requires_approval: requiresApproval,
+                capacity: capacity,
+                created_by: createdBy
+            }])
+            .select();
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function getRoomByCode(roomCode) {
-  try {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('room_code', roomCode)
-      .single();
+    try {
+        const { data, error } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('room_code', roomCode)
+            .single();
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
-    return { success: true, room: data };
-  } catch (error) {
-    console.error('Error getting room:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function getRoomById(roomId) {
-  try {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('id', roomId)
-      .single();
+    try {
+        const { data, error } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('id', roomId)
+            .single();
 
-    if (error && error.code !== 'PGRST116') throw error;
-    return { success: true, room: data };
-  } catch (error) {
-    console.error('Error getting room by ID:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
-async function getPublicRooms(limit = 50) {
-  try {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('is_public', true)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+async function getPublicRooms() {
+    try {
+        const { data, error } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('is_public', true)
+            .order('created_at', { ascending: false })
+            .limit(20);
 
-    if (error) throw error;
-    return { success: true, rooms: data };
-  } catch (error) {
-    console.error('Error getting public rooms:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function checkRoomExists(roomCode) {
-  try {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('id')
-      .eq('room_code', roomCode)
-      .limit(1);
+    try {
+        const { data, error } = await supabase
+            .from('rooms')
+            .select('id')
+            .eq('room_code', roomCode);
 
-    if (error) throw error;
-    return { success: true, exists: data && data.length > 0 };
-  } catch (error) {
-    console.error('Error checking room exists:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, exists: data && data.length > 0 };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
-// =============================================
-// PARTICIPANTS OPERATIONS
-// =============================================
+// ============================================
+// PARTICIPANT FUNCTIONS
+// ============================================
 
 async function addParticipant(roomId, userId, username, isHost = false) {
-  try {
-    const { data, error } = await supabase
-      .from('participants')
-      .insert([
-        {
-          room_id: roomId,
-          user_id: userId,
-          username: username,
-          is_host: isHost
-        }
-      ])
-      .select()
-      .single();
+    try {
+        const { data, error } = await supabase
+            .from('participants')
+            .insert([{
+                room_id: roomId,
+                user_id: userId,
+                username: username,
+                is_host: isHost
+            }])
+            .select();
 
-    if (error) throw error;
-    return { success: true, participant: data };
-  } catch (error) {
-    console.error('Error adding participant:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function removeParticipant(roomId, userId) {
-  try {
-    const { error } = await supabase
-      .from('participants')
-      .delete()
-      .eq('room_id', roomId)
-      .eq('user_id', userId);
+    try {
+        const { error } = await supabase
+            .from('participants')
+            .delete()
+            .eq('room_id', roomId)
+            .eq('user_id', userId);
 
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error removing participant:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function getParticipants(roomId) {
-  try {
-    const { data, error } = await supabase
-      .from('participants')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('joined_at', { ascending: true });
+    try {
+        const { data, error } = await supabase
+            .from('participants')
+            .select('*')
+            .eq('room_id', roomId)
+            .order('joined_at', { ascending: true });
 
-    if (error) throw error;
-    return { success: true, participants: data };
-  } catch (error) {
-    console.error('Error getting participants:', error.message);
-    return { success: false, error: error.message };
-  }
-}
+        if (error) {
+            return { success: false, error: error.message };
+        }
 
-async function getParticipantCount(roomId) {
-  try {
-    const { count, error } = await supabase
-      .from('participants')
-      .select('*', { count: 'exact', head: true })
-      .eq('room_id', roomId);
-
-    if (error) throw error;
-    return { success: true, count: count || 0 };
-  } catch (error) {
-    console.error('Error getting participant count:', error.message);
-    return { success: false, error: error.message };
-  }
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function setHostStatus(roomId, userId, isHost) {
-  try {
-    const { error } = await supabase
-      .from('participants')
-      .update({ is_host: isHost })
-      .eq('room_id', roomId)
-      .eq('user_id', userId);
+    try {
+        const { data, error } = await supabase
+            .from('participants')
+            .update({ is_host: isHost })
+            .eq('room_id', roomId)
+            .eq('user_id', userId)
+            .select();
 
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error setting host status:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function clearNonHosts(roomId) {
-  try {
-    const { error } = await supabase
-      .from('participants')
-      .update({ is_host: false })
-      .eq('room_id', roomId);
+    try {
+        const { error } = await supabase
+            .from('participants')
+            .delete()
+            .eq('room_id', roomId)
+            .eq('is_host', false);
 
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error clearing hosts:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
-// =============================================
-// TASKS OPERATIONS
-// =============================================
+// ============================================
+// TASK FUNCTIONS
+// ============================================
 
 async function addTask(roomId, title, createdBy) {
-  try {
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert([
-        {
-          room_id: roomId,
-          title: title,
-          created_by: createdBy
-        }
-      ])
-      .select()
-      .single();
+    try {
+        const { data, error } = await supabase
+            .from('tasks')
+            .insert([{
+                room_id: roomId,
+                title: title,
+                completed: false,
+                created_by: createdBy
+            }])
+            .select();
 
-    if (error) throw error;
-    return { success: true, task: data };
-  } catch (error) {
-    console.error('Error adding task:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function updateTask(taskId, updates) {
-  try {
-    const { data, error } = await supabase
-      .from('tasks')
-      .update(updates)
-      .eq('id', taskId)
-      .select()
-      .single();
+    try {
+        const { data, error } = await supabase
+            .from('tasks')
+            .update(updates)
+            .eq('id', taskId)
+            .select();
 
-    if (error) throw error;
-    return { success: true, task: data };
-  } catch (error) {
-    console.error('Error updating task:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function deleteTask(taskId) {
-  try {
-    const { error } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('id', taskId);
+    try {
+        const { error } = await supabase
+            .from('tasks')
+            .delete()
+            .eq('id', taskId);
 
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error deleting task:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function getTasks(roomId) {
-  try {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('created_at', { ascending: true });
+    try {
+        const { data, error } = await supabase
+            .from('tasks')
+            .select('*')
+            .eq('room_id', roomId)
+            .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return { success: true, tasks: data };
-  } catch (error) {
-    console.error('Error getting tasks:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function clearRoomTasks(roomId) {
-  try {
-    const { error } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('room_id', roomId);
+    try {
+        const { error } = await supabase
+            .from('tasks')
+            .delete()
+            .eq('room_id', roomId);
 
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error clearing tasks:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
-// =============================================
-// TIMER STATE OPERATIONS
-// =============================================
+// ============================================
+// TIMER FUNCTIONS
+// ============================================
 
-async function saveTimerState(roomId, timerState) {
-  try {
-    const { data, error } = await supabase
-      .from('timer_states')
-      .insert([
-        {
-          room_id: roomId,
-          is_running: timerState.isRunning,
-          mode: timerState.mode,
-          time_remaining: timerState.timeRemaining,
-          total_time: timerState.totalTime,
-          started_at: timerState.startedAt,
-          paused_at: timerState.pausedAt,
-          session_count: timerState.sessionCount
+async function saveTimerState(roomId, isRunning, mode, timeRemaining, totalTime) {
+    try {
+        const { data, error } = await supabase
+            .from('timer_states')
+            .insert([{
+                room_id: roomId,
+                is_running: isRunning,
+                mode: mode,
+                time_remaining: timeRemaining,
+                total_time: totalTime
+            }])
+            .select();
+
+        if (error) {
+            return { success: false, error: error.message };
         }
-      ])
-      .select()
-      .single();
 
-    if (error) throw error;
-    return { success: true, timerState: data };
-  } catch (error) {
-    console.error('Error saving timer state:', error.message);
-    return { success: false, error: error.message };
-  }
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function getLatestTimerState(roomId) {
-  try {
-    const { data, error } = await supabase
-      .from('timer_states')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    try {
+        const { data, error } = await supabase
+            .from('timer_states')
+            .select('*')
+            .eq('room_id', roomId)
+            .order('created_at', { ascending: false })
+            .limit(1);
 
-    if (error && error.code !== 'PGRST116') throw error;
-    return { success: true, timerState: data };
-  } catch (error) {
-    console.error('Error getting timer state:', error.message);
-    return { success: false, error: error.message };
-  }
-}
-
-// =============================================
-// ACTIVITY LOG OPERATIONS
-// =============================================
-
-async function logActivity(roomId, activityType, userId = null, username = null, details = null) {
-  try {
-    const { error } = await supabase
-      .from('room_activity_log')
-      .insert([
-        {
-          room_id: roomId,
-          activity_type: activityType,
-          user_id: userId,
-          username: username,
-          details: details
+        if (error) {
+            return { success: false, error: error.message };
         }
-      ]);
 
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error logging activity:', error.message);
-    return { success: false, error: error.message };
-  }
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
-async function getActivityLog(roomId, limit = 100) {
-  try {
-    const { data, error } = await supabase
-      .from('room_activity_log')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (error) throw error;
-    return { success: true, activities: data };
-  } catch (error) {
-    console.error('Error getting activity log:', error.message);
-    return { success: false, error: error.message };
-  }
-}
-
-// =============================================
-// JOIN REQUESTS (for private room approval)
-// =============================================
+// ============================================
+// JOIN REQUEST FUNCTIONS
+// ============================================
 
 async function createJoinRequest(roomId, userId, username) {
-  try {
-    const { data, error } = await supabase
-      .from('join_requests')
-      .insert([
-        {
-          room_id: roomId,
-          user_id: userId,
-          username: username,
-          status: 'pending'
+    try {
+        const { data, error } = await supabase
+            .from('join_requests')
+            .insert([{
+                room_id: roomId,
+                user_id: userId,
+                username: username,
+                status: 'pending'
+            }])
+            .select();
+
+        if (error) {
+            return { success: false, error: error.message };
         }
-      ])
-      .select()
-      .single();
 
-    if (error) throw error;
-    return { success: true, request: data };
-  } catch (error) {
-    console.error('Error creating join request:', error.message);
-    return { success: false, error: error.message };
-  }
-}
-
-async function getJoinRequests(roomId, status = null) {
-  try {
-    let query = supabase
-      .from('join_requests')
-      .select('*')
-      .eq('room_id', roomId);
-
-    if (status) {
-      query = query.eq('status', status);
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
     }
-
-    const { data, error } = await query.order('requested_at', { ascending: true });
-
-    if (error) throw error;
-    return { success: true, requests: data };
-  } catch (error) {
-    console.error('Error getting join requests:', error.message);
-    return { success: false, error: error.message };
-  }
 }
 
-async function approveJoinRequest(requestId, approvedBy) {
-  try {
-    const { data, error } = await supabase
-      .from('join_requests')
-      .update({
-        status: 'approved',
-        approved_at: new Date().toISOString(),
-        approved_by: approvedBy
-      })
-      .eq('id', requestId)
-      .select()
-      .single();
+async function getJoinRequests(roomId, status = 'pending') {
+    try {
+        const { data, error } = await supabase
+            .from('join_requests')
+            .select('*')
+            .eq('room_id', roomId)
+            .eq('status', status)
+            .order('created_at', { ascending: true });
 
-    if (error) throw error;
-    return { success: true, request: data };
-  } catch (error) {
-    console.error('Error approving join request:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function approveJoinRequest(requestId) {
+    try {
+        const { data, error } = await supabase
+            .from('join_requests')
+            .update({ status: 'approved', approved_at: new Date() })
+            .eq('id', requestId)
+            .select();
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function rejectJoinRequest(requestId) {
-  try {
-    const { data, error } = await supabase
-      .from('join_requests')
-      .update({
-        status: 'rejected'
-      })
-      .eq('id', requestId)
-      .select()
-      .single();
+    try {
+        const { data, error } = await supabase
+            .from('join_requests')
+            .update({ status: 'rejected', rejected_at: new Date() })
+            .eq('id', requestId)
+            .select();
 
-    if (error) throw error;
-    return { success: true, request: data };
-  } catch (error) {
-    console.error('Error rejecting join request:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 async function deleteJoinRequest(roomId, userId) {
-  try {
-    const { error } = await supabase
-      .from('join_requests')
-      .delete()
-      .eq('room_id', roomId)
-      .eq('user_id', userId);
+    try {
+        const { error } = await supabase
+            .from('join_requests')
+            .delete()
+            .eq('room_id', roomId)
+            .eq('user_id', userId);
 
-    if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error('Error deleting join request:', error.message);
-    return { success: false, error: error.message };
-  }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
-// =============================================
-// EXPORTS
-// =============================================
-
+// Export all functions
 module.exports = {
-  supabase,
-  
-  // Rooms
-  createRoom,
-  getRoomByCode,
-  getRoomById,
-  getPublicRooms,
-  checkRoomExists,
-  
-  // Participants
-  addParticipant,
-  removeParticipant,
-  getParticipants,
-  getParticipantCount,
-  setHostStatus,
-  clearNonHosts,
-  
-  // Tasks
-  addTask,
-  updateTask,
-  deleteTask,
-  getTasks,
-  clearRoomTasks,
-  
-  // Timer State
-  saveTimerState,
-  getLatestTimerState,
-  
-  // Activity Log
-  logActivity,
-  getActivityLog,
-
-  // Join Requests
-  createJoinRequest,
-  getJoinRequests,
-  approveJoinRequest,
-  rejectJoinRequest,
-  deleteJoinRequest
+    // Auth
+    signUp,
+    logIn,
+    logOut,
+    verifyToken,
+    // User Profile
+    getUserProfile,
+    updateUserProfile,
+    // Rooms
+    createRoom,
+    getRoomByCode,
+    getRoomById,
+    getPublicRooms,
+    checkRoomExists,
+    // Participants
+    addParticipant,
+    removeParticipant,
+    getParticipants,
+    setHostStatus,
+    clearNonHosts,
+    // Tasks
+    addTask,
+    updateTask,
+    deleteTask,
+    getTasks,
+    clearRoomTasks,
+    // Timer
+    saveTimerState,
+    getLatestTimerState,
+    // Join Requests
+    createJoinRequest,
+    getJoinRequests,
+    approveJoinRequest,
+    rejectJoinRequest,
+    deleteJoinRequest
 };

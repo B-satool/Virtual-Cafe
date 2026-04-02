@@ -4,6 +4,16 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- User Profiles Table (for storing user metadata from Supabase Auth)
+CREATE TABLE user_profiles (
+  id UUID PRIMARY KEY,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  full_name VARCHAR(255),
+  avatar_url VARCHAR(255),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Drop existing tables (in reverse order of foreign key dependencies)
 DROP TABLE IF EXISTS join_requests;
 DROP TABLE IF EXISTS room_activity_log;
@@ -12,6 +22,7 @@ DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS participants;
 DROP TABLE IF EXISTS rooms;
 DROP TABLE IF EXISTS user_settings;
+DROP TABLE IF EXISTS user_profiles;
 
 -- Rooms Table
 CREATE TABLE rooms (
@@ -135,9 +146,11 @@ ALTER TABLE timer_states ENABLE ROW LEVEL SECURITY;
 ALTER TABLE room_activity_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE join_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies (Allow all for now - secure later with authentication)
-CREATE POLICY IF NOT EXISTS "Enable read for all users" ON rooms FOR SELECT USING (true);
+CREATE POLICY IF NOT EXISTS "Enable read for all users" ON user_profiles FOR SELECT USING (true);
+CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON user_profiles FOR ALL USING (true);
 CREATE POLICY IF NOT EXISTS "Enable all operations for authenticated users" ON rooms FOR ALL USING (true);
 
 CREATE POLICY IF NOT EXISTS "Enable read for all users" ON participants FOR SELECT USING (true);
@@ -182,4 +195,8 @@ CREATE TRIGGER update_timer_states_updated_at BEFORE UPDATE ON timer_states
 
 DROP TRIGGER IF EXISTS update_user_settings_updated_at ON user_settings;
 CREATE TRIGGER update_user_settings_updated_at BEFORE UPDATE ON user_settings
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_user_profiles_updated_at ON user_profiles;
+CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

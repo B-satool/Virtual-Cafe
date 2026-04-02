@@ -44,10 +44,36 @@
         /* Landing Page */
         .landing-page {
             display: none;
+            padding: 20px;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f5f1ee 0%, #fff8f5 100%);
         }
 
         .landing-page.active {
             display: block;
+        }
+
+        .landing-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #d7ccc8;
+        }
+
+        .landing-title {
+            font-size: 2em;
+            color: #5c4033;
+            font-weight: bold;
+        }
+
+        .landing-user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #6d4c41;
+            font-size: 0.95em;
         }
 
         .landing-content {
@@ -646,6 +672,227 @@
             opacity: 0.5;
             pointer-events: none;
         }
+
+        /* Home Page */
+        .home-page {
+            display: none;
+            text-align: center;
+            padding: 100px 20px;
+        }
+
+        .home-page.active {
+            display: block;
+        }
+
+        .home-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .home-title {
+            font-size: 3em;
+            color: #5c4033;
+            margin-bottom: 10px;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.5);
+        }
+
+        .home-tagline {
+            font-size: 1.4em;
+            color: #8d6e63;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+
+        .home-subtitle {
+            font-size: 1.1em;
+            color: #6d4c41;
+            margin-bottom: 50px;
+            line-height: 1.6;
+        }
+
+        .home-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .home-btn {
+            padding: 15px 30px;
+            font-size: 1.05em;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .home-btn-primary {
+            background: #6d4c41;
+            color: white;
+        }
+
+        .home-btn-primary:hover {
+            background: #5d4037;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .home-btn-secondary {
+            background: #8d6e63;
+            color: white;
+        }
+
+        .home-btn-secondary:hover {
+            background: #7d5e5a;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Auth Page (Login/Signup) */
+        .auth-page {
+            display: none;
+            text-align: center;
+            padding: 60px 20px;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f5f1ee 0%, #fff8f5 100%);
+        }
+
+        .auth-page.active {
+            display: block;
+        }
+
+        .auth-container {
+            max-width: 450px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .auth-title {
+            font-size: 2em;
+            color: #5c4033;
+            margin-bottom: 30px;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.5);
+        }
+
+        .auth-page .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .auth-page .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #5c4033;
+            font-weight: 500;
+        }
+
+        .auth-page .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #d7ccc8;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+            box-sizing: border-box;
+        }
+
+        .auth-page .form-group input:focus {
+            outline: none;
+            border-color: #8d6e63;
+            box-shadow: 0 0 8px rgba(141, 110, 99, 0.2);
+        }
+
+        .error-message {
+            color: #d32f2f;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #ffebee;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .auth-page .btn-full-width {
+            width: 100%;
+            padding: 15px;
+            background: #6d4c41;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.05em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .auth-page .btn-full-width:hover {
+            background: #5d4037;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .auth-page .btn-full-width:disabled {
+            background: #bcaaa4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .auth-link {
+            margin-top: 20px;
+            color: #6d4c41;
+            font-size: 0.95em;
+        }
+
+        .auth-link a {
+            color: #8d6e63;
+            text-decoration: none;
+            font-weight: bold;
+            transition: color 0.3s ease;
+        }
+
+        .auth-link a:hover {
+            color: #5c4033;
+            text-decoration: underline;
+        }
+
+        @media (max-width: 968px) {
+            .home-page {
+                padding: 60px 20px;
+            }
+
+            .home-title {
+                font-size: 2em;
+            }
+
+            .home-tagline {
+                font-size: 1.1em;
+            }
+
+            .home-buttons {
+                grid-template-columns: 1fr;
+            }
+
+            .auth-container {
+                padding: 30px 20px;
+                max-width: none;
+                margin: 0 20px;
+            }
+
+            .auth-title {
+                font-size: 1.5em;
+            }
+        }
     </style>
 </head>
 <body>
@@ -656,8 +903,79 @@
             <p>Study together, focus better</p>
         </header>
 
-        <!-- Landing Page -->
-        <div id="landingPage" class="landing-page active">
+        <!-- Home Page -->
+        <div id="homePage" class="home-page active">
+            <div class="home-container">
+                <h1 class="home-title">☕ Virtual Café</h1>
+                <p class="home-tagline">Study Together, Focus Better</p>
+                <p class="home-subtitle">
+                    Join collaborative study rooms with real-time Pomodoro timers and shared task management.
+                </p>
+                <div class="home-buttons">
+                    <button class="home-btn home-btn-primary" onclick="showLoginPage()">Login</button>
+                    <button class="home-btn home-btn-secondary" onclick="showSignupPage()">Sign Up</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Login Page -->
+        <div id="loginPage" class="auth-page">
+            <div class="auth-container">
+                <h1 class="auth-title">Login to ☕ Virtual Café</h1>
+                <form id="loginForm" onsubmit="handleLoginSubmit(event)">
+                    <div class="form-group">
+                        <label for="loginEmail">Email</label>
+                        <input type="email" id="loginEmail" placeholder="your@email.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" placeholder="Enter your password" required>
+                    </div>
+                    <div id="loginError" class="error-message"></div>
+                    <button type="submit" class="btn-full-width" id="loginBtn">Login</button>
+                </form>
+                <p class="auth-link">Don't have an account? <a href="#" onclick="showSignupPage(); return false;">Sign Up</a></p>
+            </div>
+        </div>
+
+        <!-- Signup Page -->
+        <div id="signupPage" class="auth-page">
+            <div class="auth-container">
+                <h1 class="auth-title">Join ☕ Virtual Café</h1>
+                <form id="signupForm" onsubmit="handleSignupSubmit(event)">
+                    <div class="form-group">
+                        <label for="signupFullName">Full Name</label>
+                        <input type="text" id="signupFullName" placeholder="Your full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupEmail">Email</label>
+                        <input type="email" id="signupEmail" placeholder="your@email.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupPassword">Password</label>
+                        <input type="password" id="signupPassword" placeholder="Create a password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupConfirmPassword">Confirm Password</label>
+                        <input type="password" id="signupConfirmPassword" placeholder="Confirm your password" required>
+                    </div>
+                    <div id="signupError" class="error-message"></div>
+                    <button type="submit" class="btn-full-width" id="signupBtn">Create Account</button>
+                </form>
+                <p class="auth-link">Already have an account? <a href="#" onclick="showLoginPage(); return false;">Login</a></p>
+            </div>
+        </div>
+
+        <!-- Landing Page (after login - room management) -->
+        <div id="landingPage" class="landing-page">
+            <!-- Landing Header with Logout -->
+            <div class="landing-header">
+                <div class="landing-title">☕ Virtual Café - Study Rooms</div>
+                <div class="landing-user-info">
+                    <span id="currentUserDisplay">Welcome</span>
+                    <button class="btn-secondary" onclick="handleLogout()" style="margin-left: 20px;">Logout</button>
+                </div>
+            </div>
             <div class="landing-content">
                 <!-- Join Room -->
                 <div class="card">
@@ -695,7 +1013,7 @@
                     <button class="btn-full-width" onclick="createRoom()">Create Room</button>
                 </div>
 
-                <!-- Join Room -->
+                <!-- Join Room by Code -->
                 <div class="card">
                     <h2>Join a Study Room</h2>
                     <div class="form-group">
@@ -819,8 +1137,384 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         // ============================================
-        // GLOBAL STATE
+        // PAGE NAVIGATION
         // ============================================
+
+        function showHomePage() {
+            document.getElementById('homePage').classList.add('active');
+            document.getElementById('loginPage').classList.remove('active');
+            document.getElementById('signupPage').classList.remove('active');
+            document.getElementById('landingPage').classList.remove('active');
+        }
+
+        function showLoginPage() {
+            document.getElementById('homePage').classList.remove('active');
+            document.getElementById('loginPage').classList.add('active');
+            document.getElementById('signupPage').classList.remove('active');
+            document.getElementById('landingPage').classList.remove('active');
+        }
+
+        function showSignupPage() {
+            document.getElementById('homePage').classList.remove('active');
+            document.getElementById('loginPage').classList.remove('active');
+            document.getElementById('signupPage').classList.add('active');
+            document.getElementById('landingPage').classList.remove('active');
+        }
+
+        function showLandingPage() {
+            document.getElementById('homePage').classList.remove('active');
+            document.getElementById('loginPage').classList.remove('active');
+            document.getElementById('signupPage').classList.remove('active');
+            document.getElementById('landingPage').classList.add('active');
+        }
+
+        // ============================================
+        // AUTHENTICATION HANDLERS
+        // ============================================
+
+        async function handleLoginSubmit(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+            const loginBtn = document.getElementById('loginBtn');
+            
+            // Clear previous errors
+            errorDiv.textContent = '';
+            errorDiv.classList.remove('show');
+            
+            // Validate inputs
+            if (!email || !password) {
+                showError(errorDiv, 'Please fill in all fields');
+                return;
+            }
+
+            // Basic email validation
+            if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+                showError(errorDiv, 'Please enter a valid email address');
+                return;
+            }
+            
+            try {
+                // Disable button during submission
+                loginBtn.disabled = true;
+                loginBtn.textContent = 'Logging in...';
+                
+                // Call backend login endpoint
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: getHeaders(false),
+                    body: JSON.stringify({ 
+                        email: sanitizeInput(email), 
+                        password 
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    showError(errorDiv, data.error || 'Login failed. Please try again.');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Login';
+                    return;
+                }
+                
+                // Store auth tokens securely
+                if (data.accessToken && data.userId) {
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('refreshToken', data.refreshToken);
+                    localStorage.setItem('userId', data.userId);
+                    localStorage.setItem('userEmail', email);
+                    
+                    // Update user display
+                    const sanitizedEmail = sanitizeInput(email);
+                    document.getElementById('currentUserDisplay').textContent = `Welcome, ${sanitizedEmail.split('@')[0]}`;
+                    
+                    // Redirect to landing page
+                    showLandingPage();
+                    loadPublicRooms();
+                    
+                    // Clear form
+                    document.getElementById('loginForm').reset();
+                    
+                    showNotification('Login successful!', 'success');
+                } else {
+                    showError(errorDiv, 'Invalid response from server');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Login';
+                }
+                
+            } catch (error) {
+                console.error('Login error:', error);
+                showError(errorDiv, 'An error occurred. Please try again.');
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            }
+        }
+
+        async function handleSignupSubmit(event) {
+            event.preventDefault();
+            
+            const fullName = document.getElementById('signupFullName').value.trim();
+            const email = document.getElementById('signupEmail').value.trim();
+            const password = document.getElementById('signupPassword').value;
+            const confirmPassword = document.getElementById('signupConfirmPassword').value;
+            const errorDiv = document.getElementById('signupError');
+            const signupBtn = document.getElementById('signupBtn');
+            
+            // Clear previous errors
+            errorDiv.textContent = '';
+            errorDiv.classList.remove('show');
+            
+            // Validate inputs
+            if (!fullName || !email || !password || !confirmPassword) {
+                showError(errorDiv, 'Please fill in all fields');
+                return;
+            }
+
+            // Basic email validation
+            if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+                showError(errorDiv, 'Please enter a valid email address');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showError(errorDiv, 'Passwords do not match');
+                return;
+            }
+            
+            if (password.length < 8) {
+                showError(errorDiv, 'Password must be at least 8 characters');
+                return;
+            }
+
+            // Check password strength (at least 1 uppercase, 1 lowercase, 1 number)
+            if (!password.match(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)) {
+                showError(errorDiv, 'Password must contain uppercase, lowercase, and numbers');
+                return;
+            }
+
+            if (fullName.length < 2 || fullName.length > 100) {
+                showError(errorDiv, 'Full name must be between 2 and 100 characters');
+                return;
+            }
+            
+            try {
+                // Disable button during submission
+                signupBtn.disabled = true;
+                signupBtn.textContent = 'Creating Account...';
+                
+                // Call backend signup endpoint
+                const response = await fetch('/api/auth/signup', {
+                    method: 'POST',
+                    headers: getHeaders(false),
+                    body: JSON.stringify({ 
+                        email: sanitizeInput(email), 
+                        password,
+                        fullName: sanitizeInput(fullName)
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    showError(errorDiv, data.error || 'Sign up failed. Please try again.');
+                    signupBtn.disabled = false;
+                    signupBtn.textContent = 'Create Account';
+                    return;
+                }
+                
+                // Store auth tokens
+                if (data.accessToken && data.userId) {
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('refreshToken', data.refreshToken);
+                    localStorage.setItem('userId', data.userId);
+                    localStorage.setItem('userEmail', email);
+                    
+                    // Update user display
+                    const sanitizedEmail = sanitizeInput(email);
+                    document.getElementById('currentUserDisplay').textContent = `Welcome, ${sanitizeInput(fullName).split(' ')[0]}`;
+                    
+                    // Redirect to landing page
+                    showLandingPage();
+                    loadPublicRooms();
+                    
+                    // Clear form
+                    document.getElementById('signupForm').reset();
+                    
+                    // Show appropriate notification
+                    if (data.emailConfirmationRequired) {
+                        showNotification('Account created! Please check your email to confirm.', 'info');
+                    } else {
+                        showNotification('Account created successfully!', 'success');
+                    }
+                } else {
+                    showError(errorDiv, 'Invalid response from server');
+                    signupBtn.disabled = false;
+                    signupBtn.textContent = 'Create Account';
+                }
+                
+            } catch (error) {
+                console.error('Signup error:', error);
+                showError(errorDiv, 'An error occurred. Please try again.');
+                signupBtn.disabled = false;
+                signupBtn.textContent = 'Create Account';
+            }
+        }
+
+        function showError(errorDiv, message) {
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+        }
+
+        // ============================================
+        // SECURITY & SESSION MANAGEMENT
+        // ============================================
+
+        // Sanitize input to prevent XSS attacks
+        function sanitizeInput(input) {
+            const div = document.createElement('div');
+            div.textContent = input;
+            return div.innerHTML;
+        }
+
+        // Get auth token from localStorage
+        function getAuthToken() {
+            return localStorage.getItem('accessToken');
+        }
+
+        // Check if user has valid session
+        function hasValidSession() {
+            const token = getAuthToken();
+            const userId = localStorage.getItem('userId');
+            return !!(token && userId);
+        }
+
+        // Verify token with backend
+        async function verifyToken() {
+            try {
+                const token = getAuthToken();
+                const userId = localStorage.getItem('userId');
+                
+                if (!token || !userId) {
+                    clearSession();
+                    return false;
+                }
+
+                const response = await fetch(`/api/auth/verify`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ userId })
+                });
+
+                if (!response.ok) {
+                    clearSession();
+                    return false;
+                }
+
+                return true;
+            } catch (error) {
+                console.error('Token verification error:', error);
+                clearSession();
+                return false;
+            }
+        }
+
+        // Clear session data
+        function clearSession() {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('userId');
+            localStorage.removeItem('userEmail');
+            if (socket) {
+                socket.disconnect();
+            }
+        }
+
+        // Handle logout
+        async function handleLogout() {
+            try {
+                const token = getAuthToken();
+                
+                // Notify backend of logout (optional for session tracking)
+                if (token) {
+                    await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    }).catch(err => console.error('Logout notification failed:', err));
+                }
+
+                // Clear local session
+                clearSession();
+
+                // Return to home page
+                showHomePage();
+                
+                // Clear forms
+                document.getElementById('loginForm')?.reset();
+                document.getElementById('signupForm')?.reset();
+                
+                showNotification('Logged out successfully', 'success');
+            } catch (error) {
+                console.error('Logout error:', error);
+                clearSession();
+                showHomePage();
+            }
+        }
+
+        // Restore session on page load/refresh
+        async function restoreSession() {
+            if (!hasValidSession()) {
+                showHomePage();
+                return;
+            }
+
+            try {
+                // Verify token is still valid
+                const isValid = await verifyToken();
+                
+                if (isValid) {
+                    const userEmail = localStorage.getItem('userEmail');
+                    // Sanitize before displaying
+                    const sanitizedEmail = sanitizeInput(userEmail);
+                    document.getElementById('currentUserDisplay').textContent = `Welcome, ${sanitizedEmail.split('@')[0]}`;
+                    
+                    // Restore to landing page
+                    showLandingPage();
+                    loadPublicRooms();
+                } else {
+                    showHomePage();
+                }
+            } catch (error) {
+                console.error('Session restoration error:', error);
+                showHomePage();
+            }
+        }
+
+        // Add header with CSRF token support for future use
+        function getHeaders(includeAuth = true) {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+
+            if (includeAuth) {
+                const token = getAuthToken();
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+            }
+
+            return headers;
+        }
+
+        
 
         let socket = null;
         let currentRoom = null;
@@ -1030,13 +1724,13 @@
                 }
 
                 roomsList.innerHTML = rooms.map(room => `
-                    <div class="room-item" onclick="joinPublicRoom('${room.roomCode}', '${room.roomName}')">
+                    <div class="room-item" onclick="joinPublicRoom('${room.room_code}', '${room.room_name}')">
                         <div class="room-item-info">
-                            <div class="room-item-name">${room.roomName}</div>
-                            <span class="room-item-count">${room.participantCount}/${room.capacity}</span>
+                            <div class="room-item-name">${room.room_name}</div>
+                            <span class="room-item-count">Max: ${room.capacity}</span>
                         </div>
                         <div class="room-status">
-                            Mode: <span class="status-${room.status}">${room.status}</span>
+                            ${room.is_public ? '🔓 Public' : '🔒 Private'}
                         </div>
                     </div>
                 `).join('');
@@ -1070,11 +1764,13 @@
             try {
                 const response = await fetch('/api/rooms', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getHeaders(true),
                     body: JSON.stringify({
                         roomName,
                         isPublic: roomType === 'public',
-                        capacity
+                        requiresApproval: roomType === 'private',
+                        capacity,
+                        createdBy: document.getElementById('currentUserDisplay').textContent || 'Anonymous'
                     })
                 });
 
@@ -1091,7 +1787,8 @@
                 document.getElementById('roomType').value = 'public';
                 document.getElementById('roomCapacity').value = '10';
                 
-                joinRoomWithUsername(room.roomCode, username, true);
+                // Use room_code field (snake_case from database)
+                joinRoomWithUsername(room.room_code, username, true);
             } catch (error) {
                 console.error('Error creating room:', error);
                 showNotification('Failed to create room', true);
@@ -1129,7 +1826,7 @@
                 currentUsername = username;
 
                 // If not creator and room requires approval, show waiting room
-                if (!isCreator && room.requiresApproval) {
+                if (!isCreator && room.requires_approval) {
                     showWaitingRoom();
                     initSocket();
                     socket.emit('room:join-request', {
@@ -1395,30 +2092,40 @@
         // INITIALIZATION
         // ============================================
 
-        document.addEventListener('DOMContentLoaded', () => {
-            loadPublicRooms();
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Restore session from localStorage on page load
+            await restoreSession();
 
             // Allow Enter key to add tasks
-            document.getElementById('taskInput').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    addTask();
-                }
-            });
+            const taskInput = document.getElementById('taskInput');
+            if (taskInput) {
+                taskInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        addTask();
+                    }
+                });
+            }
 
             // Allow Enter key to join room
-            document.getElementById('username').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    const roomCode = document.getElementById('publicRoomsList').querySelector('.room-item');
-                    if (roomCode) roomCode.click();
-                }
-            });
+            const usernameInput = document.getElementById('username');
+            if (usernameInput) {
+                usernameInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        const roomCode = document.getElementById('publicRoomsList').querySelector('.room-item');
+                        if (roomCode) roomCode.click();
+                    }
+                });
+            }
 
             // Allow Enter key to create room
-            document.getElementById('roomCode').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    createRoom();
-                }
-            });
+            const roomCodeInput = document.getElementById('roomCode');
+            if (roomCodeInput) {
+                roomCodeInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        createRoom();
+                    }
+                });
+            }
         });
 
         // Cleanup on page unload

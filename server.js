@@ -1,678 +1,723 @@
+// Virtual Cafe Server
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
-const cors = require('cors');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
-
-// Import database functions
 const db = require('./src/database');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    }
 });
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+const PORT = process.env.PORT || 3000;
 
 // ============================================
-// IN-MEMORY CACHE (for real-time updates)
+// MIDDLEWARE
 // ============================================
 
-// Store active room sessions in memory for real-time sync
-const activeRooms = new Map(); // roomId -> { timerState, participants, tasks }
-const timerIntervals = new Map(); // roomId -> intervalId
+app.use(express.json({ limit: '10kb' })); // Limit request size
+app.use(express.static('public'));
 
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-
-function generateRandomRoomCode() {
-  return Math.floor(Math.random() * 900000 + 100000).toString();
-}
-
-async function initializeRoom(roomId) {
-  // Get room data from database
-  const roomResult = await db.getRoomById(roomId);
-  if (!roomResult.success || !roomResult.room) return null;
-
-  const participantsResult = await db.getParticipants(roomId);
-  const tasksResult = await db.getTasks(roomId);
-  const timerResult = await db.getLatestTimerState(roomId);
-
-  const room = {
-    id: roomResult.room.id,
-    roomCode: roomResult.room.room_code,
-    roomName: roomResult.room.room_name,
-    isPublic: roomResult.room.is_public,
-    capacity: roomResult.room.capacity,
-    participants: participantsResult.success ? participantsResult.participants : [],
-    tasks: tasksResult.success ? tasksResult.tasks : [],
-    timerState: timerResult.success && timerResult.timerState ? {
-      isRunning: timerResult.timerState.is_running,
-      mode: timerResult.timerState.mode,
-      timeRemaining: timerResult.timerState.time_remaining,
-      totalTime: timerResult.timerState.total_time,
-      startedAt: timerResult.timerState.started_at,
-      pausedAt: timerResult.timerState.paused_at,
-      sessionCount: timerResult.timerState.session_count
-    } : {
-      isRunning: false,
-      mode: 'study',
-      timeRemaining: 25 * 60,
-      totalTime: 25 * 60,
-      startedAt: null,
-      pausedAt: null,
-      sessionCount: 0
-    }
-  };
-
-  activeRooms.set(roomId, room);
-  return room;
-}
-
-function getRoomFullState(room) {
-  return {
-    id: room.id,
-    roomCode: room.roomCode,
-    roomName: room.roomName,
-    isPublic: room.isPublic,
-    requiresApproval: room.requiresApproval,
-    capacity: room.capacity,
-    participants: room.participants,
-    tasks: room.tasks,
-    timerState: room.timerState,
-    participantCount: room.participants.length
-  };
-}
-
-// ============================================
-// TIMER MANAGEMENT
-// ============================================
-
-function startRoomTimer(roomId) {
-  const room = activeRooms.get(roomId);
-  if (!room) return;
-
-  room.timerState.isRunning = true;
-  room.timerState.startedAt = new Date().toISOString();
-  room.timerState.pausedAt = null;
-
-  io.to(roomId).emit('timer:started', room.timerState);
-
-  // Clear existing interval if any
-  if (timerIntervals.has(roomId)) {
-    clearInterval(timerIntervals.get(roomId));
-  }
-
-  // Set up timer interval
-  const interval = setInterval(async () => {
-    const room = activeRooms.get(roomId);
-    if (!room) {
-      clearInterval(interval);
-      timerIntervals.delete(roomId);
-      return;
-    }
-
-    if (room.timerState.isRunning && room.timerState.timeRemaining > 0) {
-      room.timerState.timeRemaining -= 1;
-      io.to(roomId).emit('timer:tick', room.timerState);
-
-      if (room.timerState.timeRemaining === 0) {
-        transitionTimerMode(roomId);
-      }
-    }
-  }, 1000);
-
-  timerIntervals.set(roomId, interval);
-}
-
-function pauseRoomTimer(roomId) {
-  const room = activeRooms.get(roomId);
-  if (!room) return;
-
-  room.timerState.isRunning = false;
-  room.timerState.pausedAt = new Date().toISOString();
-
-  io.to(roomId).emit('timer:paused', room.timerState);
-}
-
-function resumeRoomTimer(roomId) {
-  const room = activeRooms.get(roomId);
-  if (!room) return;
-
-  room.timerState.isRunning = true;
-  const elapsedSeconds = (new Date() - new Date(room.timerState.startedAt)) / 1000;
-  room.timerState.startedAt = new Date(Date.now() - (room.timerState.totalTime - room.timerState.timeRemaining) * 1000).toISOString();
-  room.timerState.pausedAt = null;
-
-  io.to(roomId).emit('timer:resumed', room.timerState);
-}
-
-function resetRoomTimer(roomId) {
-  const room = activeRooms.get(roomId);
-  if (!room) return;
-
-  const studyTime = 25 * 60;
-  const breakTime = 5 * 60;
-  const totalTime = room.timerState.mode === 'study' ? studyTime : breakTime;
-
-  room.timerState.timeRemaining = totalTime;
-  room.timerState.totalTime = totalTime;
-  room.timerState.isRunning = false;
-  room.timerState.startedAt = null;
-  room.timerState.pausedAt = null;
-
-  io.to(roomId).emit('timer:reset', room.timerState);
-}
-
-function transitionTimerMode(roomId) {
-  const room = activeRooms.get(roomId);
-  if (!room) return;
-
-  if (room.timerState.mode === 'study') {
-    room.timerState.mode = 'break';
-    room.timerState.timeRemaining = 5 * 60;
-    room.timerState.totalTime = 5 * 60;
-    room.timerState.sessionCount += 1;
-  } else {
-    room.timerState.mode = 'study';
-    room.timerState.timeRemaining = 25 * 60;
-    room.timerState.totalTime = 25 * 60;
-  }
-
-  room.timerState.isRunning = true;
-  room.timerState.startedAt = new Date().toISOString();
-  room.timerState.pausedAt = null;
-
-  io.to(roomId).emit('timer:transitioned', room.timerState);
-  
-  // Save to database
-  db.saveTimerState(roomId, {
-    isRunning: room.timerState.isRunning,
-    mode: room.timerState.mode,
-    timeRemaining: room.timerState.timeRemaining,
-    totalTime: room.timerState.totalTime,
-    startedAt: room.timerState.startedAt,
-    pausedAt: room.timerState.pausedAt,
-    sessionCount: room.timerState.sessionCount
-  });
-}
-
-// ============================================
-// REST API ENDPOINTS
-// ============================================
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Security headers middleware
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
 });
 
-// Get all public rooms
+// Input validation helper
+function validateEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email) && email.length <= 255;
+}
+
+function validatePassword(password) {
+    return password && password.length >= 8 && password.length <= 128;
+}
+
+function validateName(name) {
+    return name && name.length >= 2 && name.length <= 100;
+}
+
+// ============================================
+// EMAIL CONFIRMATION CALLBACK HANDLER
+// ============================================
+
+app.get('/auth/callback', (req, res) => {
+    try {
+        const { access_token, refresh_token, type } = req.query;
+
+        if (!access_token) {
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Email Confirmation</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f1ee; }
+                        .container { text-align: center; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1); }
+                        h1 { color: #5c4033; }
+                        button { background: #6d4c41; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; font-size: 1em; }
+                        button:hover { background: #5d4037; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>✅ Email Confirmed!</h1>
+                        <p>Your email has been successfully confirmed.</p>
+                        <button onclick="window.location.href='/'" >Back to Virtual Café</button>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+
+        // If tokens are present, store them and redirect to app
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Email Confirmation</title>
+                <style>
+                    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f1ee; }
+                    .container { text-align: center; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1); }
+                    h1 { color: #5c4033; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>✅ Email Confirmed!</h1>
+                    <p>Your email has been successfully confirmed. Redirecting...</p>
+                </div>
+                <script>
+                    // Store tokens if provided
+                    if ('${access_token}') {
+                        localStorage.setItem('accessToken', '${access_token}');
+                        localStorage.setItem('refreshToken', '${refresh_token}');
+                    }
+                    // Redirect to app after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+                </script>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Callback error:', error);
+        res.status(500).send('Error processing email confirmation');
+    }
+});
+
+
+async function verifyToken(req, res, next) {
+    try {
+        const authHeader = req.headers.authorization;
+        
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Missing or invalid authorization header' });
+        }
+
+        const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+        const userId = req.body.userId || req.params.userId;
+
+        if (!userId) {
+            return res.status(400).json({ error: 'User ID is required' });
+        }
+
+        // Verify token with database
+        const verifyResult = await db.verifyToken(token);
+        
+        if (!verifyResult.success || !verifyResult.user) {
+            return res.status(401).json({ error: 'Invalid or expired token' });
+        }
+
+        // Attach user info to request
+        req.user = verifyResult.user;
+        req.token = token;
+        next();
+    } catch (error) {
+        console.error('Token verification error:', error);
+        res.status(401).json({ error: 'Token verification failed' });
+    }
+}
+
+// Generate random 6-digit room code
+function generateRoomCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// ============================================
+// IN-MEMORY STATE
+// ============================================
+
+const activeRooms = new Map(); // room code -> { room data, participants, tasks, timer }
+
+// ============================================
+// AUTHENTICATION ENDPOINTS
+// ============================================
+
+app.post('/api/auth/signup', async (req, res) => {
+    try {
+        const { email, password, fullName } = req.body;
+
+        // Validate required fields
+        if (!email || !password || !fullName) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Validate input format
+        if (!validateEmail(email)) {
+            return res.status(400).json({ error: 'Invalid email format' });
+        }
+
+        if (!validatePassword(password)) {
+            return res.status(400).json({ error: 'Password must be 8-128 characters' });
+        }
+
+        if (!validateName(fullName)) {
+            return res.status(400).json({ error: 'Full name must be 2-100 characters' });
+        }
+
+        // Check password strength
+        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
+            return res.status(400).json({ error: 'Password must contain uppercase, lowercase, and numbers' });
+        }
+
+        const result = await db.signUp(email, password, fullName);
+
+        if (!result.success) {
+            return res.status(400).json({ error: result.error });
+        }
+
+        res.status(201).json({
+            userId: result.userId,
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken
+        });
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        // Validate input format
+        if (!validateEmail(email)) {
+            return res.status(400).json({ error: 'Invalid email format' });
+        }
+
+        const result = await db.logIn(email, password);
+
+        if (!result.success) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        res.json({
+            userId: result.userId,
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/auth/verify', verifyToken, async (req, res) => {
+    try {
+        // If verifyToken middleware passed, token is valid
+        res.json({
+            success: true,
+            userId: req.user.id,
+            email: req.user.email
+        });
+    } catch (error) {
+        console.error('Verify error:', error);
+        res.status(401).json({ error: 'Verification failed' });
+    }
+});
+
+app.post('/api/auth/logout', verifyToken, async (req, res) => {
+    try {
+        // Logout is handled client-side by clearing tokens
+        // Backend just acknowledges the logout request
+        res.json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/api/auth/profile/:userId', verifyToken, async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Security: Users can only access their own profile
+        if (req.user.id !== userId) {
+            return res.status(403).json({ error: 'Unauthorized access to profile' });
+        }
+
+        const result = await db.getUserProfile(userId);
+
+        if (!result.success) {
+            return res.status(404).json({ error: 'Profile not found' });
+        }
+
+        res.json(result.result);
+    } catch (error) {
+        console.error('Get profile error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.put('/api/auth/profile/:userId', verifyToken, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const updates = req.body;
+
+        // Security: Users can only update their own profile
+        if (req.user.id !== userId) {
+            return res.status(403).json({ error: 'Unauthorized access to profile' });
+        }
+
+        // Sanitize updates - only allow certain fields
+        const allowedFields = ['full_name', 'avatar_url'];
+        const sanitizedUpdates = {};
+        
+        allowedFields.forEach(field => {
+            if (updates[field] !== undefined) {
+                sanitizedUpdates[field] = updates[field];
+            }
+        });
+
+        const result = await db.updateUserProfile(userId, sanitizedUpdates);
+
+        if (!result.success) {
+            return res.status(400).json({ error: result.error });
+        }
+
+        res.json(result.result[0]);
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ============================================
+// ROOM ENDPOINTS
+// ============================================
+
 app.get('/api/rooms/public', async (req, res) => {
-  const result = await db.getPublicRooms();
-  
-  if (!result.success) {
-    return res.status(500).json({ error: result.error });
-  }
+    try {
+        const result = await db.getPublicRooms();
 
-  const publicRooms = result.rooms.map(room => {
-    const activeRoom = activeRooms.get(room.id);
-    return {
-      id: room.id,
-      roomCode: room.room_code,
-      roomName: room.room_name,
-      isPublic: room.is_public,
-      participantCount: activeRoom ? activeRoom.participants.length : 0,
-      capacity: room.capacity,
-      status: activeRoom ? activeRoom.timerState.mode : 'study',
-      createdAt: room.created_at
-    };
-  });
+        if (!result.success) {
+            return res.status(400).json({ error: result.error });
+        }
 
-  res.json(publicRooms);
-});
-
-// Create a new room
-app.post('/api/rooms', async (req, res) => {
-  const { roomName, isPublic = true, capacity = 10 } = req.body;
-
-  if (!roomName || roomName.trim() === '') {
-    return res.status(400).json({ error: 'Room name is required' });
-  }
-
-  // For private rooms, set requires_approval to true
-  const requiresApproval = !isPublic;
-
-  // Generate unique 6-digit room code
-  let roomCode;
-  let codeExists = true;
-  while (codeExists) {
-    roomCode = generateRandomRoomCode();
-    const existsResult = await db.checkRoomExists(roomCode);
-    if (!existsResult.success) {
-      return res.status(500).json({ error: 'Database error' });
+        res.json(result.result);
+    } catch (error) {
+        console.error('Get public rooms error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-    codeExists = existsResult.exists;
-  }
-
-  // Create room
-  const createResult = await db.createRoom(roomCode, roomName, isPublic, capacity, requiresApproval);
-  if (!createResult.success) {
-    return res.status(500).json({ error: createResult.error });
-  }
-
-  // Initialize in-memory cache
-  await initializeRoom(createResult.room.id);
-
-  res.status(201).json({
-    id: createResult.room.id,
-    roomCode: createResult.room.room_code,
-    roomName: createResult.room.room_name,
-    isPublic: createResult.room.is_public,
-    requiresApproval: createResult.room.requires_approval,
-    capacity: createResult.room.capacity
-  });
 });
 
-// Get room by code
-app.get('/api/rooms/:roomCode', async (req, res) => {
-  const codeResult = await db.getRoomByCode(req.params.roomCode);
+app.post('/api/rooms', async (req, res) => {
+    try {
+        const { roomName, isPublic, requiresApproval, capacity, createdBy } = req.body;
 
-  if (!codeResult.success || !codeResult.room) {
-    return res.status(404).json({ error: 'Room not found' });
-  }
+        if (!roomName) {
+            return res.status(400).json({ error: 'Room name is required' });
+        }
 
-  const activeRoom = activeRooms.get(codeResult.room.id);
+        let roomCode = generateRoomCode();
+        let codeExists = true;
 
-  res.json({
-    id: codeResult.room.id,
-    roomCode: codeResult.room.room_code,
-    roomName: codeResult.room.room_name,
-    isPublic: codeResult.room.is_public,
-    participantCount: activeRoom ? activeRoom.participants.length : 0,
-    capacity: codeResult.room.capacity,
-    status: activeRoom ? activeRoom.timerState.mode : 'study',
-    createdAt: codeResult.room.created_at
-  });
+        // Ensure unique room code
+        while (codeExists) {
+            const checkResult = await db.checkRoomExists(roomCode);
+            if (checkResult.success && !checkResult.exists) {
+                codeExists = false;
+            } else {
+                roomCode = generateRoomCode();
+            }
+        }
+
+        const result = await db.createRoom(
+            roomName,
+            isPublic !== false,
+            roomCode,
+            requiresApproval === true,
+            capacity || 10,
+            createdBy
+        );
+
+        if (!result.success) {
+            return res.status(400).json({ error: result.error });
+        }
+
+        // Initialize in-memory state
+        activeRooms.set(roomCode, {
+            room: result.result,
+            participants: [],
+            tasks: [],
+            timer: {
+                isRunning: false,
+                mode: 'study',
+                timeRemaining: 25 * 60,
+                totalTime: 25 * 60
+            }
+        });
+
+        res.status(201).json(result.result);
+    } catch (error) {
+        console.error('Create room error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/api/rooms/:code', async (req, res) => {
+    try {
+        const { code } = req.params;
+
+        const result = await db.getRoomByCode(code);
+
+        if (!result.success) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
+
+        res.json(result.result);
+    } catch (error) {
+        console.error('Get room error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // ============================================
-// WEBSOCKET HANDLERS
+// SOCKET.IO HANDLERS
 // ============================================
 
 io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
+    console.log(`User connected: ${socket.id}`);
 
-  // User joins a room
-  socket.on('room:join', async (data) => {
-    const { roomCode, username } = data;
-    
-    // Get room from database
-    const roomResult = await db.getRoomByCode(roomCode);
-    if (!roomResult.success || !roomResult.room) {
-      socket.emit('error', { message: 'Room not found' });
-      return;
-    }
+    // ---- ROOM MANAGEMENT ----
 
-    const roomId = roomResult.room.id;
+    socket.on('room:join', async (data) => {
+        try {
+            const { roomCode, userId, username } = data;
 
-    // Initialize room if not already in cache
-    if (!activeRooms.has(roomId)) {
-      await initializeRoom(roomId);
-    }
+            // Get room from database
+            const roomResult = await db.getRoomByCode(roomCode);
+            if (!roomResult.success) {
+                socket.emit('error', { message: 'Room not found' });
+                return;
+            }
 
-    const room = activeRooms.get(roomId);
+            const room = roomResult.result;
+            socket.join(roomCode);
+            socket.roomCode = roomCode;
+            socket.userId = userId;
+            socket.username = username;
+            socket.isHost = false;
 
-    // Check capacity
-    if (room.participants.length >= room.capacity) {
-      socket.emit('error', { message: 'Room is full' });
-      return;
-    }
+            // Add to database
+            await db.addParticipant(room.id, userId, username, false);
 
-    // Add participant to database
-    const isHost = room.participants.length === 0;
-    const participantResult = await db.addParticipant(roomId, socket.id, username, isHost);
+            // Get current room state
+            const participantsResult = await db.getParticipants(room.id);
+            const tasksResult = await db.getTasks(room.id);
+            const timerResult = await db.getLatestTimerState(room.id);
 
-    if (!participantResult.success) {
-      socket.emit('error', { message: 'Failed to join room' });
-      return;
-    }
+            const roomState = {
+                room,
+                participants: participantsResult.result || [],
+                tasks: tasksResult.result || [],
+                timer: timerResult.result || {
+                    isRunning: false,
+                    mode: 'study',
+                    timeRemaining: 25 * 60,
+                    totalTime: 25 * 60
+                }
+            };
 
-    // Update in-memory cache
-    room.participants.push({
-      userId: socket.id,
-      username: username,
-      joinedAt: participantResult.participant.joined_at,
-      isHost: isHost
-    });
+            // Send room state to joining user
+            socket.emit('room:state', roomState);
 
-    // Join socket to room
-    socket.join(roomId);
-    socket.data.roomId = roomId;
-    socket.data.userId = socket.id;
-    socket.data.username = username;
-    socket.data.isHost = isHost;
+            // Notify others
+            socket.to(roomCode).emit('participant:joined', {
+                userId,
+                username,
+                participants: roomState.participants
+            });
 
-    // Log activity
-    await db.logActivity(roomId, 'user_joined', socket.id, username);
-
-    // Notify all users in room
-    io.to(roomId).emit('user:joined', {
-      userId: socket.id,
-      username: username,
-      isHost: isHost,
-      participants: room.participants
-    });
-
-    // Send current room state to the user
-    socket.emit('room:state', getRoomFullState(room));
-
-    console.log(`${username} joined room ${roomCode}`);
-  });
-
-  // User requests to join a private room (goes to waiting room)
-  socket.on('room:join-request', async (data) => {
-    const { roomCode, username } = data;
-
-    // Get room from database
-    const roomResult = await db.getRoomByCode(roomCode);
-    if (!roomResult.success || !roomResult.room) {
-      socket.emit('error', { message: 'Room not found' });
-      return;
-    }
-
-    const roomId = roomResult.room.id;
-    const room = roomResult.room;
-
-    // Check if room requires approval
-    if (!room.requires_approval) {
-      // If public room, just join directly
-      socket.emit('room:join-approved', { roomCode });
-      return;
-    }
-
-    // Create join request in database
-    const requestResult = await db.createJoinRequest(roomId, socket.id, username);
-    if (!requestResult.success) {
-      socket.emit('error', { message: 'Failed to request to join room' });
-      return;
-    }
-
-    // Store join request info on socket
-    socket.data.roomId = roomId;
-    socket.data.userId = socket.id;
-    socket.data.username = username;
-    socket.data.joinRequestId = requestResult.request.id;
-
-    // Join socket to a temporary room for notifications
-    socket.join(`room-${roomId}-requests`);
-
-    // Send confirmation to user
-    socket.emit('room:join-request-sent', {
-      roomCode,
-      roomName: room.room_name,
-      requestId: requestResult.request.id
-    });
-
-    // Notify the host about the new request
-    const participantsResult = await db.getParticipants(roomId);
-    if (participantsResult.success) {
-      participantsResult.participants.forEach(participant => {
-        if (participant.is_host) {
-          io.to(roomId).emit('request:pending', {
-            requestId: requestResult.request.id,
-            username,
-            userId: socket.id,
-            message: `${username} is requesting to join the room`
-          });
+        } catch (error) {
+            console.error('Room join error:', error);
+            socket.emit('error', { message: 'Failed to join room' });
         }
-      });
-    }
-
-    console.log(`${username} requested to join private room ${roomCode}`);
-  });
-
-  // Host approves a join request
-  socket.on('request:approve', async (data) => {
-    const { requestId, username, userId, roomCode } = data;
-
-    // Get room from database
-    const roomResult = await db.getRoomByCode(roomCode);
-    if (!roomResult.success || !roomResult.room) {
-      socket.emit('error', { message: 'Room not found' });
-      return;
-    }
-
-    const roomId = roomResult.room.id;
-
-    // Approve the request in database
-    const approveResult = await db.approveJoinRequest(requestId, socket.id);
-    if (!approveResult.success) {
-      socket.emit('error', { message: 'Failed to approve request' });
-      return;
-    }
-
-    // Notify the requesting user that they're approved
-    io.to(`room-${roomId}-requests`).emit('room:join-approved', {
-      roomCode,
-      userId
     });
 
-    console.log(`Host approved ${username} to join room ${roomCode}`);
-  });
+    socket.on('room:join-request', async (data) => {
+        try {
+            const { roomCode, userId, username } = data;
 
-  // Host rejects a join request
-  socket.on('request:reject', async (data) => {
-    const { requestId, username, userId, roomCode } = data;
+            // Get room from database
+            const roomResult = await db.getRoomByCode(roomCode);
+            if (!roomResult.success) {
+                socket.emit('error', { message: 'Room not found' });
+                return;
+            }
 
-    // Get room from database
-    const roomResult = await db.getRoomByCode(roomCode);
-    if (!roomResult.success || !roomResult.room) {
-      socket.emit('error', { message: 'Room not found' });
-      return;
-    }
+            const room = roomResult.result;
 
-    const roomId = roomResult.room.id;
+            // Create join request
+            const requestResult = await db.createJoinRequest(room.id, userId, username);
+            if (!requestResult.success) {
+                socket.emit('error', { message: 'Failed to create join request' });
+                return;
+            }
 
-    // Reject the request in database
-    const rejectResult = await db.rejectJoinRequest(requestId);
-    if (!rejectResult.success) {
-      socket.emit('error', { message: 'Failed to reject request' });
-      return;
-    }
+            // Notify host
+            io.to(roomCode).emit('request:pending', {
+                requestId: requestResult.result.id,
+                userId,
+                username,
+                roomId: room.id
+            });
 
-    // Notify the requesting user that they're rejected
-    io.to(`room-${roomId}-requests`).emit('room:join-rejected', {
-      roomCode,
-      userId,
-      message: 'Your request to join this room was rejected'
-    });
+            // Send waiting room message to requester
+            socket.emit('waiting:room', {
+                message: 'Your request is pending approval from the host'
+            });
 
-    console.log(`Host rejected ${username}'s request to join room ${roomCode}`);
-  });
-
-  // User leaves a room
-  socket.on('disconnect', async () => {
-    if (socket.data.roomId) {
-      const room = activeRooms.get(socket.data.roomId);
-      if (room) {
-        const username = socket.data.username;
-
-        // Remove from database
-        await db.removeParticipant(socket.data.roomId, socket.id);
-
-        // Update in-memory cache
-        room.participants = room.participants.filter(p => p.userId !== socket.id);
-
-        // Log activity
-        await db.logActivity(socket.data.roomId, 'user_left', socket.id, username);
-
-        io.to(room.id).emit('user:left', {
-          userId: socket.id,
-          username: username,
-          participants: room.participants
-        });
-
-        // Handle host change
-        if (socket.data.isHost && room.participants.length > 0) {
-          const newHost = room.participants[0];
-          await db.setHostStatus(room.id, newHost.userId, true);
-          newHost.isHost = true;
-          io.to(room.id).emit('host:changed', {
-            newHostId: newHost.userId,
-            newHostName: newHost.username
-          });
+        } catch (error) {
+            console.error('Join request error:', error);
+            socket.emit('error', { message: 'Failed to create join request' });
         }
+    });
 
-        // Clean up empty rooms
-        if (room.participants.length === 0) {
-          if (timerIntervals.has(room.id)) {
-            clearInterval(timerIntervals.get(room.id));
-            timerIntervals.delete(room.id);
-          }
-          activeRooms.delete(room.id);
+    socket.on('request:approve', async (data) => {
+        try {
+            const { requestId, userId } = data;
+
+            // Approve request
+            const result = await db.approveJoinRequest(requestId);
+            if (!result.success) {
+                socket.emit('error', { message: 'Failed to approve request' });
+                return;
+            }
+
+            // Notify user
+            io.to(`user-${userId}`).emit('request:approved', {
+                message: 'Your join request has been approved'
+            });
+
+        } catch (error) {
+            console.error('Approve request error:', error);
+            socket.emit('error', { message: 'Failed to approve request' });
         }
-
-        console.log(`${username} left room`);
-      }
-    }
-
-    console.log(`User disconnected: ${socket.id}`);
-  });
-
-  // ============ TIMER CONTROLS ============
-
-  socket.on('timer:start', () => {
-    if (!socket.data.roomId) return;
-    const room = activeRooms.get(socket.data.roomId);
-    if (room && socket.data.isHost) {
-      startRoomTimer(socket.data.roomId);
-    }
-  });
-
-  socket.on('timer:pause', () => {
-    if (!socket.data.roomId) return;
-    const room = activeRooms.get(socket.data.roomId);
-    if (room && socket.data.isHost) {
-      pauseRoomTimer(socket.data.roomId);
-    }
-  });
-
-  socket.on('timer:resume', () => {
-    if (!socket.data.roomId) return;
-    const room = activeRooms.get(socket.data.roomId);
-    if (room && socket.data.isHost) {
-      resumeRoomTimer(socket.data.roomId);
-    }
-  });
-
-  socket.on('timer:reset', () => {
-    if (!socket.data.roomId) return;
-    const room = activeRooms.get(socket.data.roomId);
-    if (room && socket.data.isHost) {
-      resetRoomTimer(socket.data.roomId);
-    }
-  });
-
-  // ============ TASK MANAGEMENT ============
-
-  socket.on('task:add', async (data) => {
-    if (!socket.data.roomId) return;
-    const room = activeRooms.get(socket.data.roomId);
-    if (!room) return;
-
-    const taskResult = await db.addTask(socket.data.roomId, data.title, socket.id);
-    if (!taskResult.success) return;
-
-    const task = {
-      id: taskResult.task.id,
-      title: taskResult.task.title,
-      completed: taskResult.task.completed,
-      createdBy: taskResult.task.created_by,
-      createdAt: taskResult.task.created_at
-    };
-
-    room.tasks.push(task);
-
-    io.to(room.id).emit('task:added', task);
-    await db.logActivity(room.id, 'task_added', socket.id, socket.data.username, { taskTitle: data.title });
-  });
-
-  socket.on('task:update', async (data) => {
-    if (!socket.data.roomId) return;
-    const room = activeRooms.get(socket.data.roomId);
-    if (!room) return;
-
-    const updates = {};
-    if (data.updates.completed !== undefined) updates.completed = data.updates.completed;
-    if (data.updates.title !== undefined) updates.title = data.updates.title;
-
-    const taskResult = await db.updateTask(data.taskId, updates);
-    if (!taskResult.success) return;
-
-    const taskIndex = room.tasks.findIndex(t => t.id === data.taskId);
-    if (taskIndex !== -1) {
-      Object.assign(room.tasks[taskIndex], data.updates);
-    }
-
-    io.to(room.id).emit('task:updated', {
-      taskId: data.taskId,
-      updates: data.updates
     });
 
-    await db.logActivity(room.id, 'task_updated', socket.id, socket.data.username, { taskId: data.taskId });
-  });
+    socket.on('request:reject', async (data) => {
+        try {
+            const { requestId, userId } = data;
 
-  socket.on('task:delete', async (data) => {
-    if (!socket.data.roomId) return;
-    const room = activeRooms.get(socket.data.roomId);
-    if (!room) return;
+            // Reject request
+            const result = await db.rejectJoinRequest(requestId);
+            if (!result.success) {
+                socket.emit('error', { message: 'Failed to reject request' });
+                return;
+            }
 
-    const deleteResult = await db.deleteTask(data.taskId);
-    if (!deleteResult.success) return;
+            // Notify user
+            io.to(`user-${userId}`).emit('request:rejected', {
+                message: 'Your join request has been rejected'
+            });
 
-    room.tasks = room.tasks.filter(t => t.id !== data.taskId);
-
-    io.to(room.id).emit('task:deleted', {
-      taskId: data.taskId
+        } catch (error) {
+            console.error('Reject request error:', error);
+            socket.emit('error', { message: 'Failed to reject request' });
+        }
     });
 
-    await db.logActivity(room.id, 'task_deleted', socket.id, socket.data.username, { taskId: data.taskId });
-  });
+    socket.on('room:leave', async (data) => {
+        try {
+            const { roomCode, userId } = data;
 
-  // Request full room state
-  socket.on('room:requestState', () => {
-    if (!socket.data.roomId) return;
-    const room = activeRooms.get(socket.data.roomId);
-    if (room) {
-      socket.emit('room:state', getRoomFullState(room));
-    }
-  });
+            if (!roomCode) return;
+
+            // Get room
+            const roomResult = await db.getRoomByCode(roomCode);
+            if (roomResult.success) {
+                // Remove participant
+                await db.removeParticipant(roomResult.result.id, userId);
+
+                // Notify others
+                socket.to(roomCode).emit('participant:left', { userId });
+            }
+
+            socket.leave(roomCode);
+        } catch (error) {
+            console.error('Room leave error:', error);
+        }
+    });
+
+    // ---- TIMER EVENTS ----
+
+    socket.on('timer:start', async (data) => {
+        try {
+            const { roomCode, mode, totalTime } = data;
+            if (!roomCode) return;
+
+            const timerState = {
+                isRunning: true,
+                mode: mode || 'study',
+                timeRemaining: totalTime || 25 * 60,
+                totalTime: totalTime || 25 * 60
+            };
+
+            // Emit to all in room
+            io.to(roomCode).emit('timer:tick', timerState);
+
+        } catch (error) {
+            console.error('Timer start error:', error);
+        }
+    });
+
+    socket.on('timer:pause', (data) => {
+        try {
+            const { roomCode } = data;
+            if (!roomCode) return;
+
+            io.to(roomCode).emit('timer:paused');
+        } catch (error) {
+            console.error('Timer pause error:', error);
+        }
+    });
+
+    socket.on('timer:resume', (data) => {
+        try {
+            const { roomCode } = data;
+            if (!roomCode) return;
+
+            io.to(roomCode).emit('timer:resumed');
+        } catch (error) {
+            console.error('Timer resume error:', error);
+        }
+    });
+
+    socket.on('timer:reset', (data) => {
+        try {
+            const { roomCode } = data;
+            if (!roomCode) return;
+
+            io.to(roomCode).emit('timer:reset', {
+                timeRemaining: 25 * 60,
+                totalTime: 25 * 60
+            });
+        } catch (error) {
+            console.error('Timer reset error:', error);
+        }
+    });
+
+    socket.on('timer:tick', (data) => {
+        try {
+            const { roomCode, timeRemaining } = data;
+            if (!roomCode) return;
+
+            socket.to(roomCode).emit('timer:tick', {
+                timeRemaining,
+                isRunning: true
+            });
+        } catch (error) {
+            console.error('Timer tick error:', error);
+        }
+    });
+
+    // ---- TASK EVENTS ----
+
+    socket.on('task:add', async (data) => {
+        try {
+            const { roomCode, title } = data;
+            if (!roomCode || !title) return;
+
+            const roomResult = await db.getRoomByCode(roomCode);
+            if (!roomResult.success) return;
+
+            const taskResult = await db.addTask(roomResult.result.id, title, socket.userId);
+            if (!taskResult.success) return;
+
+            io.to(roomCode).emit('task:added', taskResult.result);
+        } catch (error) {
+            console.error('Task add error:', error);
+        }
+    });
+
+    socket.on('task:update', async (data) => {
+        try {
+            const { roomCode, taskId, updates } = data;
+            if (!roomCode || !taskId) return;
+
+            const result = await db.updateTask(taskId, updates);
+            if (!result.success) return;
+
+            io.to(roomCode).emit('task:updated', result.result);
+        } catch (error) {
+            console.error('Task update error:', error);
+        }
+    });
+
+    socket.on('task:delete', async (data) => {
+        try {
+            const { roomCode, taskId } = data;
+            if (!roomCode || !taskId) return;
+
+            const result = await db.deleteTask(taskId);
+            if (!result.success) return;
+
+            io.to(roomCode).emit('task:deleted', { taskId });
+        } catch (error) {
+            console.error('Task delete error:', error);
+        }
+    });
+
+    // ---- CONNECTION/DISCONNECTION ----
+
+    socket.on('disconnect', async () => {
+        try {
+            if (socket.roomCode && socket.userId) {
+                const roomResult = await db.getRoomByCode(socket.roomCode);
+                if (roomResult.success) {
+                    await db.removeParticipant(roomResult.result.id, socket.userId);
+                }
+                socket.to(socket.roomCode).emit('participant:left', { userId: socket.userId });
+            }
+            console.log(`User disconnected: ${socket.id}`);
+        } catch (error) {
+            console.error('Disconnect error:', error);
+        }
+    });
 });
 
 // ============================================
-// START SERVER
+// SERVER STARTUP
 // ============================================
 
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Virtual Café server running on http://localhost:${PORT}`);
-  console.log(`Supabase URL: ${process.env.SUPABASE_URL}`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  server.close(() => {
-    console.log('HTTP server closed');
-    process.exit(0);
-  });
+    console.log(`Virtual Café server running on port ${PORT}`);
+    console.log(`Open http://localhost:${PORT} in your browser`);
 });
