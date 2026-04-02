@@ -153,7 +153,7 @@ async function updateUserProfile(userId, updates) {
 // ROOM FUNCTIONS
 // ============================================
 
-async function createRoom(roomName, isPublic, roomCode, requiresApproval, capacity, createdBy) {
+async function createRoom(roomName, isPublic, roomCode, capacity, createdBy) {
     try {
         const { data, error } = await supabase
             .from('rooms')
@@ -161,7 +161,6 @@ async function createRoom(roomName, isPublic, roomCode, requiresApproval, capaci
                 room_name: roomName,
                 is_public: isPublic,
                 room_code: roomCode,
-                requires_approval: requiresApproval,
                 capacity: capacity,
                 created_by: createdBy
             }])
@@ -232,9 +231,10 @@ async function deleteRoom(roomId) {
 
 async function getPublicRooms() {
     try {
+        // Query rooms and count participants in one go
         const { data, error } = await supabase
             .from('rooms')
-            .select('*')
+            .select('*, participants:participants(count)')
             .eq('is_public', true)
             .order('created_at', { ascending: false })
             .limit(20);
@@ -243,7 +243,13 @@ async function getPublicRooms() {
             return { success: false, error: error.message };
         }
 
-        return { success: true, result: data };
+        // Transform results to have a flat participant_count
+        const transformed = data.map(room => ({
+            ...room,
+            participant_count: room.participants ? room.participants[0].count : 0
+        }));
+
+        return { success: true, result: transformed };
     } catch (error) {
         return { success: false, error: error.message };
     }
