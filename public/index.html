@@ -1486,9 +1486,18 @@
                     const sanitizedEmail = sanitizeInput(userEmail);
                     document.getElementById('currentUserDisplay').textContent = `Welcome, ${sanitizedEmail.split('@')[0]}`;
                     
-                    // Restore to landing page
-                    showLandingPage();
-                    loadPublicRooms();
+                    // Check if user was in a room before refresh
+                    const roomCode = localStorage.getItem('currentRoom');
+                    const username = localStorage.getItem('currentUsername');
+                    
+                    if (roomCode && username) {
+                        // Restore to room
+                        joinRoomWithUsername(roomCode, username, false);
+                    } else {
+                        // Restore to landing page
+                        showLandingPage();
+                        loadPublicRooms();
+                    }
                 } else {
                     showHomePage();
                 }
@@ -1541,19 +1550,13 @@
                 console.log('Connected to server');
             });
 
-            socket.on('user:joined', (data) => {
+            socket.on('participant:joined', (data) => {
                 updateParticipants(data.participants);
-                isHost = data.isHost;
-                updateHostInfo();
                 showNotification(`${data.username} joined the room`);
             });
 
-            socket.on('user:left', (data) => {
-                updateParticipants(data.participants);
-                showNotification(`${data.username} left the room`);
-                if (!isHost) {
-                    updateHostInfo();
-                }
+            socket.on('participant:left', (data) => {
+                showNotification('A participant left the room');
             });
 
             socket.on('room:state', (state) => {
@@ -1844,6 +1847,11 @@
                 currentRoom = roomCode;
                 currentUsername = username;
 
+                // Save room context to localStorage for restoration on refresh
+                localStorage.setItem('currentRoom', roomCode);
+                localStorage.setItem('currentUsername', username);
+                localStorage.setItem('isRoomHost', isCreator);
+
                 // If not creator and room requires approval, show waiting room
                 if (!isCreator && room.requires_approval) {
                     showWaitingRoom();
@@ -1856,7 +1864,8 @@
                     initSocket();
                     socket.emit('room:join', {
                         roomCode,
-                        username
+                        username,
+                        userId: localStorage.getItem('userId')
                     });
                     showRoomPage();
                 }
@@ -1894,6 +1903,10 @@
 
         function leaveRoom() {
             if (socket) {
+                socket.emit('room:leave', { 
+                    roomCode: currentRoom, 
+                    userId: localStorage.getItem('userId')
+                });
                 socket.disconnect();
                 socket = null;
             }
@@ -1901,6 +1914,11 @@
             currentUserId = null;
             isHost = false;
             roomState = {};
+
+            // Clear room from localStorage
+            localStorage.removeItem('currentRoom');
+            localStorage.removeItem('currentUsername');
+            localStorage.removeItem('isRoomHost');
 
             document.getElementById('roomPage').classList.remove('active');
             document.getElementById('landingPage').classList.add('active');

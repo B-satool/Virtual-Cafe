@@ -429,6 +429,43 @@ io.on('connection', (socket) => {
             }
 
             const room = roomResult.result;
+
+            // Check if user is already in the room (prevent duplicates)
+            const participantsResult = await db.getParticipants(room.id);
+            const participants = participantsResult.result || [];
+            const alreadyJoined = participants.some(p => p.user_id === userId);
+            
+            if (alreadyJoined) {
+                // User already in room, just resend room state
+                const tasksResult = await db.getTasks(room.id);
+                const timerResult = await db.getLatestTimerState(room.id);
+                
+                const roomState = {
+                    room,
+                    participants: participants,
+                    tasks: tasksResult.result || [],
+                    timer: timerResult.result || {
+                        isRunning: false,
+                        mode: 'study',
+                        timeRemaining: 25 * 60,
+                        totalTime: 25 * 60
+                    }
+                };
+                
+                socket.emit('room:state', roomState);
+                socket.join(roomCode);
+                socket.roomCode = roomCode;
+                socket.userId = userId;
+                socket.username = username;
+                return;
+            }
+
+            // Check room capacity
+            if (participants.length >= room.capacity) {
+                socket.emit('error', { message: 'Room is full' });
+                return;
+            }
+
             socket.join(roomCode);
             socket.roomCode = roomCode;
             socket.userId = userId;
@@ -438,14 +475,14 @@ io.on('connection', (socket) => {
             // Add to database
             await db.addParticipant(room.id, userId, username, false);
 
-            // Get current room state
-            const participantsResult = await db.getParticipants(room.id);
+            // Get updated participant list
+            const updatedParticipantsResult = await db.getParticipants(room.id);
             const tasksResult = await db.getTasks(room.id);
             const timerResult = await db.getLatestTimerState(room.id);
 
             const roomState = {
                 room,
-                participants: participantsResult.result || [],
+                participants: updatedParticipantsResult.result || [],
                 tasks: tasksResult.result || [],
                 timer: timerResult.result || {
                     isRunning: false,
@@ -458,8 +495,8 @@ io.on('connection', (socket) => {
             // Send room state to joining user
             socket.emit('room:state', roomState);
 
-            // Notify others
-            socket.to(roomCode).emit('participant:joined', {
+            // Notify others - send updated participants list
+            io.to(roomCode).emit('participant:joined', {
                 userId,
                 username,
                 participants: roomState.participants
