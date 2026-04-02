@@ -213,6 +213,23 @@ async function getRoomById(roomId) {
     }
 }
 
+async function deleteRoom(roomId) {
+    try {
+        const { error } = await supabase
+            .from('rooms')
+            .delete()
+            .eq('id', roomId);
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
 async function getPublicRooms() {
     try {
         const { data, error } = await supabase
@@ -603,6 +620,7 @@ module.exports = {
     createRoom,
     getRoomByCode,
     getRoomById,
+    deleteRoom,
     getPublicRooms,
     checkRoomExists,
     // Participants
