@@ -8,6 +8,7 @@ const roomTimers = new Map(); // roomCode -> { timeRemaining, totalTime, iRunnin
 const roomHosts = new Map(); // roomCode -> hostUserId (who currently has control)
 const disconnectTimeouts = new Map(); // userId -> { timeoutId, roomCode }
 const roomChatMessages = new Map(); // roomCode -> [{ userId, username, message, timestamp }, ...]
+const roomTimerConfigs = new Map(); // roomCode -> { studyDuration, breakDuration }
 
 /**
  * Initialize all socket event handlers
@@ -84,12 +85,21 @@ function initSocketHandlers(io) {
 
         // Initialize timer if first joiner
         if (!roomTimers.has(roomCode)) {
+          const studyDuration = 25 * 60; // 25 minutes
+          const breakDuration = 5 * 60;  // 5 minutes
+          
           roomTimers.set(roomCode, {
-            timeRemaining: 25 * 60,
-            totalTime: 25 * 60,
+            timeRemaining: studyDuration,
+            totalTime: studyDuration,
             isRunning: false,
             mode: "study",
             intervalId: null,
+          });
+          
+          // Initialize timer config
+          roomTimerConfigs.set(roomCode, {
+            studyDuration,
+            breakDuration
           });
         }
 
@@ -155,15 +165,44 @@ function initSocketHandlers(io) {
       if (!isAuthoritative(roomCode, userId)) return;
 
       const timer = roomTimers.get(roomCode);
+      const config = roomTimerConfigs.get(roomCode) || { studyDuration: 25 * 60, breakDuration: 5 * 60 };
+      
       if (timer) {
         stopRoomTimer(roomCode);
         timer.isRunning = false;
         timer.mode = "study";
-        timer.timeRemaining = 25 * 60;
-        timer.totalTime = 25 * 60;
-        console.log(`[TIMER] Room ${roomCode} reset`);
+        timer.timeRemaining = config.studyDuration;
+        timer.totalTime = config.studyDuration;
+        console.log(`[TIMER] Room ${roomCode} reset with custom durations (study: ${config.studyDuration}s, break: ${config.breakDuration}s)`);
         io.to(roomCode).emit("timer:reset", getTimerPublicState(timer));
       }
+    });
+
+    socket.on("timer:configure", (data) => {
+      const { roomCode, userId } = socket;
+      if (!isAuthoritative(roomCode, userId)) return;
+
+      const { studyDuration, breakDuration } = data;
+      if (!studyDuration || !breakDuration) return;
+
+      // Validate ranges
+      if (studyDuration < 60 || studyDuration > 7200 || breakDuration < 60 || breakDuration > 3600) {
+        socket.emit("error", { message: "Timer durations out of valid range" });
+        return;
+      }
+
+      // Update configuration
+      roomTimerConfigs.set(roomCode, {
+        studyDuration,
+        breakDuration
+      });
+
+      console.log(`[TIMER] Room ${roomCode} configured: study ${studyDuration}s, break ${breakDuration}s`);
+      io.to(roomCode).emit("timer:configured", {
+        studyDuration,
+        breakDuration,
+        message: "Timer settings updated by host"
+      });
     });
 
     // ---- TASK EVENTS ----
@@ -558,6 +597,8 @@ function isAuthoritative(roomCode, userId) {
 
 function startRoomTimer(io, roomCode) {
   const timer = roomTimers.get(roomCode);
+  const config = roomTimerConfigs.get(roomCode) || { studyDuration: 25 * 60, breakDuration: 5 * 60 };
+  
   if (!timer) return;
   stopRoomTimer(roomCode);
 
@@ -566,9 +607,11 @@ function startRoomTimer(io, roomCode) {
       timer.timeRemaining--;
       io.to(roomCode).emit("timer:tick", getTimerPublicState(timer));
     } else {
+      // Transition to next mode with configured durations
       timer.mode = timer.mode === "study" ? "break" : "study";
-      timer.timeRemaining = timer.mode === "study" ? 25 * 60 : 5 * 60;
+      timer.timeRemaining = timer.mode === "study" ? config.studyDuration : config.breakDuration;
       timer.totalTime = timer.timeRemaining;
+      console.log(`[TIMER] Room ${roomCode} transitioned to ${timer.mode} mode (${timer.timeRemaining}s)`);
       io.to(roomCode).emit("timer:transitioned", getTimerPublicState(timer));
     }
   }, 1000);

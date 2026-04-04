@@ -45,6 +45,15 @@ import {
   resetTimer,
 } from "./modules/timer.js";
 import {
+  initializeTimerSettings,
+  showTimerSettings,
+  closeTimerSettings,
+  saveTimerSettings,
+  getTimerSettings,
+  playTimerEndSound,
+  requestNotificationPermission,
+} from "./modules/timerSettings.js";
+import {
   addTask,
   updateTaskCompletion,
   deleteTask,
@@ -87,6 +96,9 @@ window.transferHost = transferHost;
 window.removeParticipant = removeParticipant;
 window.showTransferHostModal = showTransferHostModal;
 window.sendChatMessage = sendChatMessage;
+window.showTimerSettings = showTimerSettings;
+window.closeTimerSettings = closeTimerSettings;
+window.saveTimerSettings = saveTimerSettings;
 
 /**
  * Switch between tabs (Tasks and Chat)
@@ -165,6 +177,10 @@ async function restoreSession() {
  * Initialize the application
  */
 document.addEventListener("DOMContentLoaded", async () => {
+  // Initialize timer settings
+  initializeTimerSettings();
+  requestNotificationPermission();
+
   // Initial session check
   await restoreSession();
 
@@ -254,9 +270,18 @@ function setupSocketEvents() {
 
   socket.on("timer:transitioned", (timerState) => {
     updateTimerUI(timerState);
+    
+    // Play sound notification when transitioning (previous session ended)
+    const previousMode = timerState.mode === "study" ? "break" : "study";
+    playTimerEndSound(previousMode);
+    
     showNotification(
       `Mode changed to ${timerState.mode === "study" ? "Study" : "Break"}`,
     );
+  });
+
+  socket.on("timer:configured", (data) => {
+    showNotification(`⚙️ Host updated timer settings: Study ${data.studyDuration/60}min, Break ${data.breakDuration/60}min`);
   });
 
   socket.on("task:added", (task) => {
