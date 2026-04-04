@@ -2,20 +2,61 @@
  * Main Application Entry Point for Virtual Café
  */
 
-import { initSocket, getSocket, setSocketState, getSocketState, disconnectSocket } from './modules/socket.js';
-import { 
-    showHomePage, showLandingPage, showLoginPage, showSignupPage, 
-    toggleAmbientSounds, showRoomPage 
-} from './modules/ui.js';
-import { handleLoginSubmit, handleSignupSubmit, verifyToken, logout } from './modules/auth.js';
-import { loadPublicRooms } from './modules/api.js';
-import { 
-    handleCreateRoom, joinRoomWithUsername, leaveRoom, joinByCode, cancelJoinRequest,
-    updateRoomUI, updateParticipants, updateHostInfo 
-} from './modules/room.js';
-import { updateTimerUI, startTimer, pauseTimer, resumeTimer, resetTimer } from './modules/timer.js';
-import { addTask, updateTaskCompletion, deleteTask, updateTasksUI } from './modules/tasks.js';
-import { showNotification } from './modules/utils.js';
+import {
+  initSocket,
+  getSocket,
+  setSocketState,
+  getSocketState,
+  disconnectSocket,
+} from "./modules/socket.js";
+import {
+  showHomePage,
+  showLandingPage,
+  showLoginPage,
+  showSignupPage,
+  toggleAmbientSounds,
+  showRoomPage,
+} from "./modules/ui.js";
+import {
+  handleLoginSubmit,
+  handleSignupSubmit,
+  verifyToken,
+  logout,
+} from "./modules/auth.js";
+import { loadPublicRooms } from "./modules/api.js";
+import {
+  handleCreateRoom,
+  joinRoomWithUsername,
+  leaveRoom,
+  joinByCode,
+  cancelJoinRequest,
+  updateRoomUI,
+  updateParticipants,
+  updateHostInfo,
+  transferHost,
+  removeParticipant,
+  showTransferHostModal,
+} from "./modules/room.js";
+import {
+  updateTimerUI,
+  startTimer,
+  pauseTimer,
+  resumeTimer,
+  resetTimer,
+} from "./modules/timer.js";
+import {
+  addTask,
+  updateTaskCompletion,
+  deleteTask,
+  updateTasksUI,
+} from "./modules/tasks.js";
+import {
+  sendChatMessage,
+  displayChatMessage,
+  loadChatHistory,
+  clearChat,
+} from "./modules/chat.js";
+import { showNotification } from "./modules/utils.js";
 
 // Global access for HTML onclick handlers
 window.showLoginPage = showLoginPage;
@@ -25,8 +66,10 @@ window.handleLoginSubmit = handleLoginSubmit;
 window.handleSignupSubmit = handleSignupSubmit;
 window.toggleAmbientSounds = toggleAmbientSounds;
 window.joinRoom = (roomCode) => {
-    const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail').split('@')[0];
-    joinRoomWithUsername(roomCode, username);
+  const username =
+    localStorage.getItem("currentUsername") ||
+    localStorage.getItem("userEmail").split("@")[0];
+  joinRoomWithUsername(roomCode, username);
 };
 window.joinByCode = joinByCode;
 window.cancelJoinRequest = cancelJoinRequest;
@@ -40,166 +83,246 @@ window.addTask = addTask;
 window.updateTaskCompletion = updateTaskCompletion;
 window.deleteTask = deleteTask;
 window.logout = logout;
+window.transferHost = transferHost;
+window.removeParticipant = removeParticipant;
+window.showTransferHostModal = showTransferHostModal;
+window.sendChatMessage = sendChatMessage;
+
+/**
+ * Switch between tabs (Tasks and Chat)
+ */
+window.switchTab = function(tab) {
+  // Update tab buttons
+  const tasksTab = document.getElementById('tasksTab');
+  const chatTab = document.getElementById('chatTab');
+  
+  // Update content visibility
+  const tasksContent = document.getElementById('tasksContent');
+  const chatContent = document.getElementById('chatContent');
+  
+  if (tab === 'tasks') {
+    tasksTab.classList.add('tab-active');
+    chatTab.classList.remove('tab-active');
+    tasksContent.style.display = 'block';
+    chatContent.style.display = 'none';
+  } else if (tab === 'chat') {
+    tasksTab.classList.remove('tab-active');
+    chatTab.classList.add('tab-active');
+    tasksContent.style.display = 'none';
+    chatContent.style.display = 'block';
+    // Focus chat input when switching to chat
+    setTimeout(() => {
+      const chatInput = document.getElementById('chatInput');
+      if (chatInput) chatInput.focus();
+    }, 0);
+  }
+};
 
 /**
  * Restore session from localStorage
  */
 async function restoreSession() {
-    const accessToken = localStorage.getItem('accessToken');
-    const userId = localStorage.getItem('userId');
-    const userEmail = localStorage.getItem('userEmail');
+  const accessToken = localStorage.getItem("accessToken");
+  const userId = localStorage.getItem("userId");
+  const userEmail = localStorage.getItem("userEmail");
 
-    if (!accessToken || !userId) {
-        showHomePage();
-        return;
-    }
+  if (!accessToken || !userId) {
+    showHomePage();
+    return;
+  }
 
-    try {
-        const isValid = await verifyToken();
-        if (isValid) {
-            document.getElementById('currentUserDisplay').textContent = `Welcome, ${userEmail.split('@')[0]}`;
-            
-            const roomCode = localStorage.getItem('currentRoom');
-            const username = localStorage.getItem('currentUsername');
-            const currentPage = localStorage.getItem('currentPage');
-            
-            if (roomCode && username && currentPage === 'roomPage') {
-                await joinRoomWithUsername(roomCode, username, localStorage.getItem('isRoomHost') === 'true');
-            } else {
-                showLandingPage();
-                loadPublicRooms();
-            }
-        } else {
-            localStorage.clear();
-            showHomePage();
-        }
-    } catch (error) {
-        console.error('Session restoration error:', error);
-        showHomePage();
+  try {
+    const isValid = await verifyToken();
+    if (isValid) {
+      document.getElementById("currentUserDisplay").textContent =
+        `Welcome, ${userEmail.split("@")[0]}`;
+
+      const roomCode = localStorage.getItem("currentRoom");
+      const username = localStorage.getItem("currentUsername");
+      const currentPage = localStorage.getItem("currentPage");
+
+      if (roomCode && username && currentPage === "roomPage") {
+        await joinRoomWithUsername(
+          roomCode,
+          username,
+          localStorage.getItem("isRoomHost") === "true",
+        );
+      } else {
+        showLandingPage();
+        loadPublicRooms();
+      }
+    } else {
+      localStorage.clear();
+      showHomePage();
     }
+  } catch (error) {
+    console.error("Session restoration error:", error);
+    showHomePage();
+  }
 }
 
 /**
  * Initialize the application
  */
-document.addEventListener('DOMContentLoaded', async () => {
-    // Initial session check
-    await restoreSession();
-    
-    // Auth success listener
-    window.addEventListener('auth:success', () => {
-        loadPublicRooms();
-    });
+document.addEventListener("DOMContentLoaded", async () => {
+  // Initial session check
+  await restoreSession();
 
-    // Global event listeners for input fields
-    setupEventListeners();
+  // Auth success listener
+  window.addEventListener("auth:success", () => {
+    loadPublicRooms();
+  });
 
-    // Socket Initialization & Event Handlers
-    setupSocketEvents();
+  // Global event listeners for input fields
+  setupEventListeners();
+
+  // Socket Initialization & Event Handlers
+  setupSocketEvents();
 });
 
 function setupEventListeners() {
-    const taskInput = document.getElementById('taskInput');
-    if (taskInput) {
-        taskInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') addTask();
-        });
-    }
+  const taskInput = document.getElementById("taskInput");
+  if (taskInput) {
+    taskInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") addTask();
+    });
+  }
 
-    const joinCodeInput = document.getElementById('joinRoomCode');
-    if (joinCodeInput) {
-        joinCodeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') joinByCode();
-        });
-    }
+  const joinCodeInput = document.getElementById("joinRoomCode");
+  if (joinCodeInput) {
+    joinCodeInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") joinByCode();
+    });
+  }
 
-    // Generic form enter listeners could be added here
+  // Generic form enter listeners could be added here
 }
 
 function setupSocketEvents() {
-    // We only set up these once
-    const socket = initSocket();
+  // We only set up these once
+  const socket = initSocket();
 
-    socket.on('room:state', (state) => {
-        console.log('[SYNC] Received authoritative state:', state);
-        
-        const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail').split('@')[0];
-        
-        // Trust the server's isHost flag 100%
-        setSocketState(state.room ? state.room.room_code : null, username, state.isHost, state);
-        
-        updateRoomUI(state);
-        updateParticipants(state.participants || []);
-        updateTasksUI(state.tasks || []);
-        updateTimerUI(state.timer || {});
-        updateHostInfo();
-    });
+  socket.on("room:state", (state) => {
+    console.log("[SYNC] Received authoritative state:", state);
 
-    socket.on('participant:joined', (data) => {
-        const { roomState } = getSocketState();
-        if (data.participants) {
-            roomState.participants = data.participants;
-            updateParticipants(data.participants);
-        }
-        if (data.username) {
-            showNotification(`${data.username} joined the room`);
-        }
-    });
+    const username =
+      localStorage.getItem("currentUsername") ||
+      localStorage.getItem("userEmail").split("@")[0];
 
-    socket.on('participant:left', (data) => {
-        const { roomState } = getSocketState();
-        if (roomState.participants) {
-            roomState.participants = roomState.participants.filter(p => p.user_id !== data.userId);
-            updateParticipants(roomState.participants);
-        }
-        showNotification('A participant left the room');
-    });
+    // Trust the server's isHost flag 100%
+    setSocketState(
+      state.room ? state.room.room_code : null,
+      username,
+      state.isHost,
+      state,
+    );
 
-    socket.on('timer:started', (timerState) => updateTimerUI(timerState));
-    socket.on('timer:paused', (timerState) => updateTimerUI(timerState));
-    socket.on('timer:resumed', (timerState) => updateTimerUI(timerState));
-    socket.on('timer:reset', (timerState) => updateTimerUI(timerState));
-    socket.on('timer:tick', (timerState) => updateTimerUI(timerState));
-    
-    socket.on('timer:transitioned', (timerState) => {
-        updateTimerUI(timerState);
-        showNotification(`Mode changed to ${timerState.mode === 'study' ? 'Study' : 'Break'}`);
-    });
+    updateRoomUI(state);
+    updateParticipants(state.participants || []);
+    updateTasksUI(state.tasks || []);
+    updateTimerUI(state.timer || {});
+    updateHostInfo();
+  });
 
-    socket.on('task:added', (task) => {
-        const { roomState } = getSocketState();
-        if (roomState.tasks) {
-            roomState.tasks.push(task);
-            updateTasksUI(roomState.tasks);
-        }
-    });
+  socket.on("participant:joined", (data) => {
+    const { roomState } = getSocketState();
+    if (data.participants) {
+      roomState.participants = data.participants;
+      updateParticipants(data.participants);
+    }
+    if (data.username) {
+      showNotification(`${data.username} joined the room`);
+    }
+  });
 
-    socket.on('task:updated', (updatedTask) => {
-        const { roomState } = getSocketState();
-        if (roomState && roomState.tasks) {
-            const index = roomState.tasks.findIndex(t => t.id === updatedTask.id);
-            if (index !== -1) {
-                roomState.tasks[index] = updatedTask;
-                updateTasksUI(roomState.tasks);
-            }
-        }
-    });
+  socket.on("participant:left", (data) => {
+    const { roomState } = getSocketState();
+    if (roomState.participants) {
+      roomState.participants = roomState.participants.filter(
+        (p) => p.user_id !== data.userId,
+      );
+      updateParticipants(roomState.participants);
+    }
+    showNotification("A participant left the room");
+  });
 
-    socket.on('task:deleted', (data) => {
-        const { roomState } = getSocketState();
-        if (roomState && roomState.tasks) {
-            roomState.tasks = roomState.tasks.filter(t => t.id !== data.taskId);
-            updateTasksUI(roomState.tasks);
-        }
-    });
+  socket.on("timer:started", (timerState) => updateTimerUI(timerState));
+  socket.on("timer:paused", (timerState) => updateTimerUI(timerState));
+  socket.on("timer:resumed", (timerState) => updateTimerUI(timerState));
+  socket.on("timer:reset", (timerState) => updateTimerUI(timerState));
+  socket.on("timer:tick", (timerState) => updateTimerUI(timerState));
 
-    socket.on('room:closed', (data) => {
-        showNotification(data.message, true);
-        leaveRoom();
-    });
+  socket.on("timer:transitioned", (timerState) => {
+    updateTimerUI(timerState);
+    showNotification(
+      `Mode changed to ${timerState.mode === "study" ? "Study" : "Break"}`,
+    );
+  });
+
+  socket.on("task:added", (task) => {
+    const { roomState } = getSocketState();
+    if (roomState.tasks) {
+      roomState.tasks.push(task);
+      updateTasksUI(roomState.tasks);
+    }
+  });
+
+  socket.on("task:updated", (updatedTask) => {
+    const { roomState } = getSocketState();
+    if (roomState && roomState.tasks) {
+      const index = roomState.tasks.findIndex((t) => t.id === updatedTask.id);
+      if (index !== -1) {
+        roomState.tasks[index] = updatedTask;
+        updateTasksUI(roomState.tasks);
+      }
+    }
+  });
+
+  socket.on("task:deleted", (data) => {
+    const { roomState } = getSocketState();
+    if (roomState && roomState.tasks) {
+      roomState.tasks = roomState.tasks.filter((t) => t.id !== data.taskId);
+      updateTasksUI(roomState.tasks);
+    }
+  });
+
+  socket.on("room:closed", (data) => {
+    showNotification(data.message, true);
+    leaveRoom();
+  });
+
+  socket.on("host:transferred", (data) => {
+    showNotification(
+      `Host role transferred to ${data.newHostUsername || "another user"}!`,
+    );
+  });
+
+  socket.on("participant:removed", (data) => {
+    showNotification(
+      data.message || "You have been removed from the room",
+      true,
+    );
+    leaveRoom();
+  });
+
+  socket.on("participant:removed_from_room", (data) => {
+    showNotification(
+      `${data.username || "A participant"} was removed from the room`,
+    );
+  });
+
+  socket.on("chat:message", (data) => {
+    displayChatMessage(data);
+  });
+
+  socket.on("chat:history", (data) => {
+    if (data.messages) {
+      loadChatHistory(data.messages);
+    }
+  });
 }
 
 // Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-    disconnectSocket();
+window.addEventListener("beforeunload", () => {
+  disconnectSocket();
 });

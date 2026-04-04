@@ -1,240 +1,423 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>☕ Virtual Café - Study Together</title>
     <!-- CSS -->
-    <link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
     <div class="container">
-        <!-- Header (Only visible on login/signup) -->
-        <header id="mainHeader">
-            <h1>☕ Virtual Café</h1>
-            <p>Study together, focus better</p>
-        </header>
+      <!-- Header (Only visible on login/signup) -->
+      <header id="mainHeader">
+        <h1>☕ Virtual Café</h1>
+        <p>Study together, focus better</p>
+      </header>
 
-        <!-- Home Page -->
-        <div id="homePage" class="home-page">
-            <div class="home-container">
-                <h1 class="home-title">☕ Virtual Café</h1>
-                <p class="home-tagline">Study Together, Focus Better</p>
-                <p class="home-subtitle">
-                    Join collaborative study rooms with real-time Pomodoro timers and shared task management.
-                </p>
-                <div class="home-buttons">
-                    <button class="home-btn home-btn-primary" onclick="showLoginPage()">Login</button>
-                    <button class="home-btn home-btn-secondary" onclick="showSignupPage()">Sign Up</button>
-                </div>
+      <!-- Home Page -->
+      <div id="homePage" class="home-page">
+        <div class="home-container">
+          <h1 class="home-title">☕ Virtual Café</h1>
+          <p class="home-tagline">Study Together, Focus Better</p>
+          <p class="home-subtitle">
+            Join collaborative study rooms with real-time Pomodoro timers and
+            shared task management.
+          </p>
+          <div class="home-buttons">
+            <button class="home-btn home-btn-primary" onclick="showLoginPage()">
+              Login
+            </button>
+            <button
+              class="home-btn home-btn-secondary"
+              onclick="showSignupPage()"
+            >
+              Sign Up
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Login Page -->
+      <div id="loginPage" class="auth-page">
+        <div class="auth-container">
+          <h1 class="auth-title">Login to ☕ Virtual Café</h1>
+          <form id="loginForm" onsubmit="handleLoginSubmit(event)">
+            <div class="form-group">
+              <label for="loginEmail">Email</label>
+              <input
+                type="email"
+                id="loginEmail"
+                placeholder="your@email.com"
+                required
+              />
             </div>
+            <div class="form-group">
+              <label for="loginPassword">Password</label>
+              <input
+                type="password"
+                id="loginPassword"
+                placeholder="Enter your password"
+                required
+              />
+            </div>
+            <div id="loginError" class="error-message"></div>
+            <button type="submit" class="btn-full-width" id="loginBtn">
+              Login
+            </button>
+          </form>
+          <p class="auth-link">
+            Don't have an account?
+            <a
+              href="#"
+              onclick="
+                showSignupPage();
+                return false;
+              "
+              >Sign Up</a
+            >
+          </p>
+        </div>
+      </div>
+
+      <!-- Signup Page -->
+      <div id="signupPage" class="auth-page">
+        <div class="auth-container">
+          <h1 class="auth-title">Join ☕ Virtual Café</h1>
+          <form id="signupForm" onsubmit="handleSignupSubmit(event)">
+            <div class="form-group">
+              <label for="signupFullName">Full Name</label>
+              <input
+                type="text"
+                id="signupFullName"
+                placeholder="Your full name"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="signupEmail">Email</label>
+              <input
+                type="email"
+                id="signupEmail"
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="signupPassword">Password</label>
+              <input
+                type="password"
+                id="signupPassword"
+                placeholder="Create a password"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="signupConfirmPassword">Confirm Password</label>
+              <input
+                type="password"
+                id="signupConfirmPassword"
+                placeholder="Confirm your password"
+                required
+              />
+            </div>
+            <div id="signupError" class="error-message"></div>
+            <button type="submit" class="btn-full-width" id="signupBtn">
+              Create Account
+            </button>
+          </form>
+          <p class="auth-link">
+            Already have an account?
+            <a
+              href="#"
+              onclick="
+                showLoginPage();
+                return false;
+              "
+              >Login</a
+            >
+          </p>
+        </div>
+      </div>
+
+      <!-- Landing Page -->
+      <div id="landingPage" class="landing-page">
+        <div class="landing-header">
+          <div>
+            <div class="landing-title">☕ Virtual Café</div>
+            <div class="landing-user-info" id="currentUserDisplay">
+              Welcome, User
+            </div>
+          </div>
+          <button class="btn-secondary" onclick="logout()">Logout</button>
         </div>
 
-        <!-- Login Page -->
-        <div id="loginPage" class="auth-page">
-            <div class="auth-container">
-                <h1 class="auth-title">Login to ☕ Virtual Café</h1>
-                <form id="loginForm" onsubmit="handleLoginSubmit(event)">
-                    <div class="form-group">
-                        <label for="loginEmail">Email</label>
-                        <input type="email" id="loginEmail" placeholder="your@email.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="loginPassword">Password</label>
-                        <input type="password" id="loginPassword" placeholder="Enter your password" required>
-                    </div>
-                    <div id="loginError" class="error-message"></div>
-                    <button type="submit" class="btn-full-width" id="loginBtn">Login</button>
-                </form>
-                <p class="auth-link">Don't have an account? <a href="#" onclick="showSignupPage(); return false;">Sign Up</a></p>
+        <div class="landing-content">
+          <!-- Join Room Card -->
+          <div class="card">
+            <h2>Join a Room</h2>
+
+            <div
+              style="
+                margin-bottom: 25px;
+                padding-bottom: 20px;
+                border-bottom: 1px solid #eee;
+              "
+            >
+              <label for="joinRoomCode">Join with Code</label>
+              <div class="add-task-form">
+                <input
+                  type="text"
+                  id="joinRoomCode"
+                  placeholder="Enter 6-digit code"
+                  maxlength="6"
+                />
+                <button onclick="joinByCode()">Join</button>
+              </div>
             </div>
+
+            <div class="room-list" id="publicRoomsList">
+              <div class="empty-state">Loading public rooms...</div>
+            </div>
+            <button
+              class="btn-secondary btn-full-width"
+              onclick="loadPublicRooms()"
+            >
+              Refresh List
+            </button>
+          </div>
+
+          <!-- Create Room Card -->
+          <div class="card">
+            <h2>Create New Room</h2>
+            <div class="form-group">
+              <label for="roomName">Room Name</label>
+              <input
+                type="text"
+                id="roomName"
+                placeholder="E.g. Focus Session #1"
+              />
+            </div>
+            <div class="form-group">
+              <label for="capacity">Capacity (Max 50)</label>
+              <input type="number" id="capacity" value="10" min="1" max="50" />
+            </div>
+            <div class="form-group">
+              <label class="sound-label">
+                <input type="checkbox" id="isPublic" checked /> Public Room
+              </label>
+            </div>
+            <button onclick="createRoom()">Create Room</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Waiting Room Page -->
+      <div id="waitingRoomPage" class="waiting-room-page">
+        <div class="waiting-room-container">
+          <div class="loading-spinner"></div>
+          <h2>Requesting Access...</h2>
+          <p>The room host needs to approve your join request.</p>
+          <button class="btn-secondary" onclick="cancelJoinRequest()">
+            Cancel Request
+          </button>
+        </div>
+      </div>
+
+      <!-- Room Page -->
+      <div id="roomPage" class="room-page">
+        <div class="room-header">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: start;
+            "
+          >
+            <div>
+              <div class="room-title" id="currentRoomTitle">
+                Loading Room...
+              </div>
+              <div id="currentRoomSubtitle" style="color: #8d6e63">
+                (Joining...)
+              </div>
+            </div>
+            <button class="btn-danger" onclick="leaveRoom()">Leave Room</button>
+          </div>
+          <div class="room-info">
+            <div class="info-box">
+              <div class="info-label">Room Code</div>
+              <div class="info-value" id="roomCodeDisplay">------</div>
+            </div>
+            <div class="info-box">
+              <div class="info-label">Participants</div>
+              <div class="info-value">
+                <span id="participantCountDisplay">0</span>
+              </div>
+            </div>
+            <div class="info-box">
+              <div class="info-label">Current Session</div>
+              <div class="info-value">
+                #<span id="sessionCountDisplay">1</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Signup Page -->
-        <div id="signupPage" class="auth-page">
-            <div class="auth-container">
-                <h1 class="auth-title">Join ☕ Virtual Café</h1>
-                <form id="signupForm" onsubmit="handleSignupSubmit(event)">
-                    <div class="form-group">
-                        <label for="signupFullName">Full Name</label>
-                        <input type="text" id="signupFullName" placeholder="Your full name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="signupEmail">Email</label>
-                        <input type="email" id="signupEmail" placeholder="your@email.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="signupPassword">Password</label>
-                        <input type="password" id="signupPassword" placeholder="Create a password" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="signupConfirmPassword">Confirm Password</label>
-                        <input type="password" id="signupConfirmPassword" placeholder="Confirm your password" required>
-                    </div>
-                    <div id="signupError" class="error-message"></div>
-                    <button type="submit" class="btn-full-width" id="signupBtn">Create Account</button>
-                </form>
-                <p class="auth-link">Already have an account? <a href="#" onclick="showLoginPage(); return false;">Login</a></p>
-            </div>
+        <!-- Timer Section -->
+        <div class="timer-container">
+          <div class="timer-mode" id="timerMode">📚 Study Mode</div>
+          <div class="timer-display" id="timerDisplay">25:00</div>
+          <div class="timer-controls" id="timerControls">
+            <button class="btn-success" onclick="startTimer()">Start</button>
+            <button onclick="pauseTimer()">Pause</button>
+            <button onclick="resumeTimer()">Resume</button>
+            <button class="btn-danger" onclick="resetTimer()">Reset</button>
+          </div>
+          <div
+            id="hostInfo"
+            style="margin-top: 15px; color: #8d6e63; font-style: italic"
+          >
+            📍 You are a participant
+          </div>
         </div>
 
-        <!-- Landing Page -->
-        <div id="landingPage" class="landing-page">
-            <div class="landing-header">
-                <div>
-                    <div class="landing-title">☕ Virtual Café</div>
-                    <div class="landing-user-info" id="currentUserDisplay">Welcome, User</div>
-                </div>
-                <button class="btn-secondary" onclick="logout()">Logout</button>
+        <!-- Content Grid: Tasks/Chat and Participants -->
+        <div class="room-content">
+          <div class="tasks-section">
+            <!-- Tab Switcher -->
+            <div class="content-tabs">
+              <button class="tab-button tab-active" id="tasksTab" onclick="switchTab('tasks')">
+                📝 Shared Tasks
+              </button>
+              <button class="tab-button" id="chatTab" onclick="switchTab('chat')">
+                💬 Chat
+              </button>
             </div>
 
-            <div class="landing-content">
-                <!-- Join Room Card -->
-                <div class="card">
-                    <h2>Join a Room</h2>
-                    
-                    <div style="margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #eee;">
-                        <label for="joinRoomCode">Join with Code</label>
-                        <div class="add-task-form">
-                            <input type="text" id="joinRoomCode" placeholder="Enter 6-digit code" maxlength="6">
-                            <button onclick="joinByCode()">Join</button>
-                        </div>
-                    </div>
-
-                    <div class="room-list" id="publicRoomsList">
-                        <div class="empty-state">Loading public rooms...</div>
-                    </div>
-                    <button class="btn-secondary btn-full-width" onclick="loadPublicRooms()">Refresh List</button>
-                </div>
-
-                <!-- Create Room Card -->
-                <div class="card">
-                    <h2>Create New Room</h2>
-                    <div class="form-group">
-                        <label for="roomName">Room Name</label>
-                        <input type="text" id="roomName" placeholder="E.g. Focus Session #1">
-                    </div>
-                    <div class="form-group">
-                        <label for="capacity">Capacity (Max 50)</label>
-                        <input type="number" id="capacity" value="10" min="1" max="50">
-                    </div>
-                    <div class="form-group">
-                        <label class="sound-label">
-                            <input type="checkbox" id="isPublic" checked> Public Room
-                        </label>
-                    </div>
-                    <button onclick="createRoom()">Create Room</button>
-                </div>
+            <!-- Tasks Content -->
+            <div class="tab-content" id="tasksContent">
+              <div class="add-task-form">
+                <input
+                  type="text"
+                  id="taskInput"
+                  placeholder="Add a shared task for everyone..."
+                />
+                <button onclick="addTask()">Add Task</button>
+              </div>
+              <div class="task-list" id="taskList">
+                <div class="empty-state">No tasks yet. Start by adding one!</div>
+              </div>
             </div>
+
+            <!-- Chat Content -->
+            <div class="tab-content" id="chatContent" style="display: none;">
+              <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                  <div class="empty-state">No messages yet. Start a conversation!</div>
+                </div>
+                <div class="chat-input-form">
+                  <input
+                    type="text"
+                    id="chatInput"
+                    placeholder="Send a message..."
+                    onkeypress="if(event.key === 'Enter') sendChatMessage()"
+                  />
+                  <button onclick="sendChatMessage()">Send</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="participants-section">
+            <div class="section-title">👥 Studying Now</div>
+            <div class="participant-list" id="participantList">
+              <!-- Participants will be listed here -->
+            </div>
+          </div>
         </div>
 
-        <!-- Waiting Room Page -->
-        <div id="waitingRoomPage" class="waiting-room-page">
-            <div class="waiting-room-container">
-                <div class="loading-spinner"></div>
-                <h2>Requesting Access...</h2>
-                <p>The room host needs to approve your join request.</p>
-                <button class="btn-secondary" onclick="cancelJoinRequest()">Cancel Request</button>
+        <!-- Ambient Sounds -->
+        <div id="ambientSounds" class="ambient-sounds">
+          <div class="ambient-header" onclick="toggleAmbientSounds()">
+            <div class="ambient-title" style="margin-bottom: 0">
+              🎵 Ambient Sounds
             </div>
+            <button class="ambient-toggle-btn" id="ambientToggleBtn">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="m18 15-6-6-6 6" />
+              </svg>
+            </button>
+          </div>
+          <div class="sound-control">
+            <label class="sound-label">
+              <input
+                type="checkbox"
+                id="rainSound"
+                onchange="toggleSound('rain')"
+              />
+              Rain ☔
+            </label>
+            <input
+              type="range"
+              class="sound-volume"
+              min="0"
+              max="100"
+              value="50"
+              onchange="updateSoundVolume('rain', this.value)"
+            />
+          </div>
+          <div class="sound-control">
+            <label class="sound-label">
+              <input
+                type="checkbox"
+                id="cafeSound"
+                onchange="toggleSound('cafe')"
+              />
+              Café Chatter ☕
+            </label>
+            <input
+              type="range"
+              class="sound-volume"
+              min="0"
+              max="100"
+              value="50"
+              onchange="updateSoundVolume('cafe', this.value)"
+            />
+          </div>
+          <div class="sound-control">
+            <label class="sound-label">
+              <input
+                type="checkbox"
+                id="fireplaceSound"
+                onchange="toggleSound('fireplace')"
+              />
+              Fireplace 🔥
+            </label>
+            <input
+              type="range"
+              class="sound-volume"
+              min="0"
+              max="100"
+              value="50"
+              onchange="updateSoundVolume('fireplace', this.value)"
+            />
+          </div>
         </div>
-
-        <!-- Room Page -->
-        <div id="roomPage" class="room-page">
-            <div class="room-header">
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div>
-                        <div class="room-title" id="currentRoomTitle">Loading Room...</div>
-                        <div id="currentRoomSubtitle" style="color: #8d6e63;">(Joining...)</div>
-                    </div>
-                    <button class="btn-danger" onclick="leaveRoom()">Leave Room</button>
-                </div>
-                <div class="room-info">
-                    <div class="info-box">
-                        <div class="info-label">Room Code</div>
-                        <div class="info-value" id="roomCodeDisplay">------</div>
-                    </div>
-                    <div class="info-box">
-                        <div class="info-label">Participants</div>
-                        <div class="info-value"><span id="participantCountDisplay">0</span></div>
-                    </div>
-                    <div class="info-box">
-                        <div class="info-label">Current Session</div>
-                        <div class="info-value">#<span id="sessionCountDisplay">1</span></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Timer Section -->
-            <div class="timer-container">
-                <div class="timer-mode" id="timerMode">📚 Study Mode</div>
-                <div class="timer-display" id="timerDisplay">25:00</div>
-                <div class="timer-controls" id="timerControls">
-                    <button class="btn-success" onclick="startTimer()">Start</button>
-                    <button onclick="pauseTimer()">Pause</button>
-                    <button onclick="resumeTimer()">Resume</button>
-                    <button class="btn-danger" onclick="resetTimer()">Reset</button>
-                </div>
-                <div id="hostInfo" style="margin-top: 15px; color: #8d6e63; font-style: italic;">
-                    📍 You are a participant
-                </div>
-            </div>
-
-            <!-- Content Grid: Tasks and Participants -->
-            <div class="room-content">
-                <div class="tasks-section">
-                    <div class="section-title">📝 Shared Tasks</div>
-                    <div class="add-task-form">
-                        <input type="text" id="taskInput" placeholder="Add a shared task for everyone...">
-                        <button onclick="addTask()">Add Task</button>
-                    </div>
-                    <div class="task-list" id="taskList">
-                        <div class="empty-state">No tasks yet. Start by adding one!</div>
-                    </div>
-                </div>
-
-                <div class="participants-section">
-                    <div class="section-title">👥 Studying Now</div>
-                    <div class="participant-list" id="participantList">
-                        <!-- Participants will be listed here -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Ambient Sounds -->
-            <div id="ambientSounds" class="ambient-sounds">
-                <div class="ambient-header" onclick="toggleAmbientSounds()">
-                    <div class="ambient-title" style="margin-bottom: 0;">🎵 Ambient Sounds</div>
-                    <button class="ambient-toggle-btn" id="ambientToggleBtn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
-                    </button>
-                </div>
-                <div class="sound-control">
-                    <label class="sound-label">
-                        <input type="checkbox" id="rainSound" onchange="toggleSound('rain')">
-                        Rain ☔
-                    </label>
-                    <input type="range" class="sound-volume" min="0" max="100" value="50" onchange="updateSoundVolume('rain', this.value)">
-                </div>
-                <div class="sound-control">
-                    <label class="sound-label">
-                        <input type="checkbox" id="cafeSound" onchange="toggleSound('cafe')">
-                        Café Chatter ☕
-                    </label>
-                    <input type="range" class="sound-volume" min="0" max="100" value="50" onchange="updateSoundVolume('cafe', this.value)">
-                </div>
-                <div class="sound-control">
-                    <label class="sound-label">
-                        <input type="checkbox" id="fireplaceSound" onchange="toggleSound('fireplace')">
-                        Fireplace 🔥
-                    </label>
-                    <input type="range" class="sound-volume" min="0" max="100" value="50" onchange="updateSoundVolume('fireplace', this.value)">
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
 
     <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
     <script type="module" src="/js/main.js"></script>
-</body>
+  </body>
 </html>
