@@ -80,7 +80,7 @@ window.updateSoundVolume = updateSoundVolume;
 window.joinRoom = (roomCode) => {
   const username =
     localStorage.getItem("currentUsername") ||
-    localStorage.getItem("userEmail").split("@")[0];
+    localStorage.getItem("userEmail")?.split("@")[0] || "Guest";
   joinRoomWithUsername(roomCode, username);
 };
 window.joinByCode = joinByCode;
@@ -150,7 +150,7 @@ async function restoreSession() {
     const isValid = await verifyToken();
     if (isValid) {
       document.getElementById("currentUserDisplay").textContent =
-        `Welcome, ${userEmail.split("@")[0]}`;
+        `Welcome, ${localStorage.getItem('currentUsername') || userEmail.split("@")[0]}`;
 
       const roomCode = localStorage.getItem("currentRoom");
       const username = localStorage.getItem("currentUsername");
@@ -224,7 +224,7 @@ function setupSocketEvents() {
     socket.on('room:state', (state) => {
         console.log('[SYNC] Received authoritative state:', state);
         
-        const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail').split('@')[0];
+        const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail')?.split('@')[0] || "Guest";
         
         // Trust the server's isHost flag 100%
         setSocketState(state.room ? state.room.room_code : null, username, state.isHost, state);

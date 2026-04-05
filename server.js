@@ -75,17 +75,17 @@ async function verifyToken(req, res, next) {
 
 // Auth
 app.post("/api/auth/signup", async (req, res) => {
-  const { email, password, fullName } = req.body;
-  const result = await db.signUp(email, password, fullName);
+  const { email, password, username, fullName } = req.body;
+  const result = await db.signUp(email, password, username, fullName);
   if (!result.success) return res.status(400).json({ error: result.error });
   res.status(201).json(result);
 });
 
 app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body; // email here acts as identifier (email or username)
   const result = await db.logIn(email, password);
   if (!result.success)
-    return res.status(401).json({ error: "Invalid credentials" });
+    return res.status(401).json({ error: result.error || "Invalid credentials" });
   res.json(result);
 });
 

@@ -52,13 +52,13 @@ export const AuthPage = ({
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">{isLogin ? "Email or Username" : "Email"}</label>
               <input
                 id="email"
-                type="email"
+                type={isLogin ? "text" : "email"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
+                placeholder={isLogin ? "your@email.com or username" : "your@email.com"}
                 required
               />
             </div>

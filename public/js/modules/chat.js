@@ -18,7 +18,7 @@ export function sendChatMessage() {
     const message = chatInput.value.trim();
     if (!message) return;
 
-    const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail').split('@')[0];
+    const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail')?.split('@')[0] || "Guest";
     const userId = localStorage.getItem('userId');
 
     socket.emit('chat:message', {

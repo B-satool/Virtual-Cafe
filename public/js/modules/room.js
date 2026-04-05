@@ -235,7 +235,7 @@ export async function handleCreateRoom() {
       createdBy: localStorage.getItem("userId"),
     };
 
-    const username = localStorage.getItem("userEmail").split("@")[0];
+    const username = localStorage.getItem("currentUsername") || localStorage.getItem("userEmail")?.split("@")[0] || "Guest";
     const data = await createNewRoom(roomData);
 
     if (data.room_code) {
@@ -320,7 +320,7 @@ export function joinByCode() {
 
   const username =
     localStorage.getItem("currentUsername") ||
-    localStorage.getItem("userEmail").split("@")[0];
+    localStorage.getItem("userEmail")?.split("@")[0] || "Guest";
   joinRoomWithUsername(code, username);
   codeInput.value = "";
 }

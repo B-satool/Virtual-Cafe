@@ -26,11 +26,11 @@ export async function handleLoginSubmit(event) {
         return;
     }
 
-    // Basic email validation
-    if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-        showError(errorDiv, 'Please enter a valid email address');
-        return;
-    }
+    // Basic email validation removed to allow usernames
+    // if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+    //     showError(errorDiv, 'Please enter a valid email address');
+    //     return;
+    // }
     
     try {
         // Disable button during submission
@@ -61,11 +61,10 @@ export async function handleLoginSubmit(event) {
             localStorage.setItem('accessToken', data.accessToken);
             localStorage.setItem('refreshToken', data.refreshToken);
             localStorage.setItem('userId', data.userId);
-            localStorage.setItem('userEmail', email);
+            localStorage.setItem('currentUsername', data.username || sanitizeInput(email).split('@')[0]);
             
             // Update user display
-            const sanitizedEmail = sanitizeInput(email);
-            document.getElementById('currentUserDisplay').textContent = `Welcome, ${sanitizedEmail.split('@')[0]}`;
+            document.getElementById('currentUserDisplay').textContent = `Welcome, ${localStorage.getItem('currentUsername')}`;
             
             // Redirect to landing page
             showLandingPage();
@@ -97,8 +96,8 @@ export async function handleLoginSubmit(event) {
  */
 export async function handleSignupSubmit(event) {
     event.preventDefault();
-    
     const fullName = document.getElementById('signupFullName').value.trim();
+    const username = document.getElementById('signupUsername').value.trim();
     const email = document.getElementById('signupEmail').value.trim();
     const password = document.getElementById('signupPassword').value;
     const confirmPassword = document.getElementById('signupConfirmPassword').value;
@@ -110,7 +109,7 @@ export async function handleSignupSubmit(event) {
     errorDiv.classList.remove('show');
     
     // Validate inputs
-    if (!fullName || !email || !password || !confirmPassword) {
+    if (!fullName || !username || !email || !password || !confirmPassword) {
         showError(errorDiv, 'Please fill in all fields');
         return;
     }
@@ -136,6 +135,7 @@ export async function handleSignupSubmit(event) {
             body: JSON.stringify({ 
                 email: sanitizeInput(email), 
                 password,
+                username: sanitizeInput(username),
                 fullName: sanitizeInput(fullName)
             })
         });
@@ -153,9 +153,9 @@ export async function handleSignupSubmit(event) {
             localStorage.setItem('accessToken', data.accessToken);
             localStorage.setItem('refreshToken', data.refreshToken);
             localStorage.setItem('userId', data.userId);
-            localStorage.setItem('userEmail', email);
+            localStorage.setItem('currentUsername', sanitizeInput(username));
             
-            document.getElementById('currentUserDisplay').textContent = `Welcome, ${sanitizeInput(fullName).split(' ')[0]}`;
+            document.getElementById('currentUserDisplay').textContent = `Welcome, ${sanitizeInput(username)}`;
             
             showLandingPage();
             document.getElementById('signupForm').reset();

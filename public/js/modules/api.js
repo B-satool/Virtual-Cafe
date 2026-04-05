@@ -36,7 +36,10 @@ export async function loadPublicRooms() {
         roomsList.innerHTML = rooms.map(room => `
             <div class="room-item" onclick="window.joinRoom('${room.room_code}')">
                 <div class="room-item-info">
-                    <span class="room-item-name">${sanitizeInput(room.room_name)}</span>
+                    <div style="display: flex; flex-direction: column;">
+                        <span class="room-item-name">${sanitizeInput(room.room_name)}</span>
+                        <span style="font-size: 0.85em; color: #666; margin-top: 4px;">👑 Host: ${sanitizeInput(room.host_username || 'Unknown')}</span>
+                    </div>
                     <span class="room-item-count">👥 ${room.participant_count || 0}/${room.capacity}</span>
                 </div>
                 <div class="room-status ${room.timer_mode === 'study' ? 'status-studying' : 'status-break'}">

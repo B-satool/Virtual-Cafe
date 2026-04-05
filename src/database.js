@@ -10,7 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // AUTHENTICATION FUNCTIONS
 // ============================================
 
-async function signUp(email, password, fullName) {
+async function signUp(email, password, username, fullName) {
     try {
         // Create user with Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -37,6 +37,7 @@ async function signUp(email, password, fullName) {
             .insert([{
                 id: userId,
                 email,
+                username,
                 full_name: fullName,
                 avatar_url: null
             }], { onConflict: 'id' });
@@ -63,20 +64,44 @@ async function signUp(email, password, fullName) {
     }
 }
 
-async function logIn(email, password) {
+async function logIn(identifier, password) {
     try {
+        let emailToLogin = identifier;
+        
+        // If identifier doesn't look like an email, assume it's a username
+        if (!identifier.includes('@')) {
+            const { data, error } = await supabase
+                .from('user_profiles')
+                .select('email')
+                .eq('username', identifier)
+                .single();
+            
+            if (error || !data) {
+                return { success: false, error: 'Invalid username' };
+            }
+            emailToLogin = data.email;
+        }
+
         const { data, error } = await supabase.auth.signInWithPassword({
-            email,
+            email: emailToLogin,
             password
         });
 
         if (error) {
             return { success: false, error: error.message };
         }
+        
+        // Let's get the username from user_profiles to return it
+        const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('username')
+            .eq('id', data.user.id)
+            .single();
 
         return {
             success: true,
             userId: data.user.id,
+            username: profile?.username || emailToLogin.split('@')[0],
             accessToken: data.session?.access_token,
             refreshToken: data.session?.refresh_token
         };
@@ -242,11 +267,29 @@ async function getPublicRooms() {
         if (error) {
             return { success: false, error: error.message };
         }
+        
+        // Fetch host usernames
+        let hostsMap = {};
+        if (data && data.length > 0) {
+            const roomIds = data.map(r => r.id);
+            const { data: hostsData, error: hostsError } = await supabase
+                .from('participants')
+                .select('room_id, username')
+                .in('room_id', roomIds)
+                .eq('is_host', true);
+            
+            if (!hostsError && hostsData) {
+                hostsData.forEach(h => {
+                    hostsMap[h.room_id] = h.username;
+                });
+            }
+        }
 
-        // Transform results to have a flat participant_count
+        // Transform results to have a flat participant_count and host_username
         const transformed = data.map(room => ({
             ...room,
-            participant_count: room.participants ? room.participants[0].count : 0
+            participant_count: room.participants ? room.participants[0].count : 0,
+            host_username: hostsMap[room.id] || "Unknown"
         }));
 
         return { success: true, result: transformed };
