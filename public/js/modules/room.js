@@ -19,7 +19,7 @@ import {
 import { showNotification, escapeHtml, sanitizeInput } from "./utils.js";
 import { createNewRoom, loadPublicRooms } from "./api.js";
 import { clearChat } from "./chat.js";
-import { stopAllSounds } from './sound.js';
+import { stopAllSounds } from "./sound.js";
 
 /**
  * Update the room UI with current state
@@ -296,14 +296,14 @@ export function leaveRoom() {
   localStorage.removeItem("currentUsername");
   localStorage.removeItem("isRoomHost");
 
-    showLandingPage();
-    loadPublicRooms();
-    
-    // Clear room UI
-    document.getElementById('currentRoomTitle').textContent = 'Loading Room...';
-    document.getElementById('taskInput').value = '';
-    document.getElementById('taskList').innerHTML = '';
-    document.getElementById('participantList').innerHTML = '';
+  showLandingPage();
+  loadPublicRooms();
+
+  // Clear room UI
+  document.getElementById("currentRoomTitle").textContent = "Loading Room...";
+  document.getElementById("taskInput").value = "";
+  document.getElementById("taskList").innerHTML = "";
+  document.getElementById("participantList").innerHTML = "";
 }
 
 /**
