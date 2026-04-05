@@ -83,11 +83,14 @@ function initSocketHandlers(io) {
         socket.userId = userId;
         socket.username = username;
 
+        // Log session start
+        await db.logSessionStart(userId, room.id);
+
         // Initialize timer if first joiner
         if (!roomTimers.has(roomCode)) {
           const studyDuration = 25 * 60; // 25 minutes
-          const breakDuration = 5 * 60;  // 5 minutes
-          
+          const breakDuration = 5 * 60; // 5 minutes
+
           roomTimers.set(roomCode, {
             timeRemaining: studyDuration,
             totalTime: studyDuration,
@@ -95,11 +98,11 @@ function initSocketHandlers(io) {
             mode: "study",
             intervalId: null,
           });
-          
+
           // Initialize timer config
           roomTimerConfigs.set(roomCode, {
             studyDuration,
-            breakDuration
+            breakDuration,
           });
         }
 
@@ -165,15 +168,20 @@ function initSocketHandlers(io) {
       if (!isAuthoritative(roomCode, userId)) return;
 
       const timer = roomTimers.get(roomCode);
-      const config = roomTimerConfigs.get(roomCode) || { studyDuration: 25 * 60, breakDuration: 5 * 60 };
-      
+      const config = roomTimerConfigs.get(roomCode) || {
+        studyDuration: 25 * 60,
+        breakDuration: 5 * 60,
+      };
+
       if (timer) {
         stopRoomTimer(roomCode);
         timer.isRunning = false;
         timer.mode = "study";
         timer.timeRemaining = config.studyDuration;
         timer.totalTime = config.studyDuration;
-        console.log(`[TIMER] Room ${roomCode} reset with custom durations (study: ${config.studyDuration}s, break: ${config.breakDuration}s)`);
+        console.log(
+          `[TIMER] Room ${roomCode} reset with custom durations (study: ${config.studyDuration}s, break: ${config.breakDuration}s)`,
+        );
         io.to(roomCode).emit("timer:reset", getTimerPublicState(timer));
       }
     });
@@ -186,7 +194,12 @@ function initSocketHandlers(io) {
       if (!studyDuration || !breakDuration) return;
 
       // Validate ranges
-      if (studyDuration < 60 || studyDuration > 7200 || breakDuration < 60 || breakDuration > 3600) {
+      if (
+        studyDuration < 60 ||
+        studyDuration > 7200 ||
+        breakDuration < 60 ||
+        breakDuration > 3600
+      ) {
         socket.emit("error", { message: "Timer durations out of valid range" });
         return;
       }
@@ -194,14 +207,16 @@ function initSocketHandlers(io) {
       // Update configuration
       roomTimerConfigs.set(roomCode, {
         studyDuration,
-        breakDuration
+        breakDuration,
       });
 
-      console.log(`[TIMER] Room ${roomCode} configured: study ${studyDuration}s, break ${breakDuration}s`);
+      console.log(
+        `[TIMER] Room ${roomCode} configured: study ${studyDuration}s, break ${breakDuration}s`,
+      );
       io.to(roomCode).emit("timer:configured", {
         studyDuration,
         breakDuration,
-        message: "Timer settings updated by host"
+        message: "Timer settings updated by host",
       });
     });
 
@@ -377,7 +392,7 @@ function initSocketHandlers(io) {
     socket.on("chat:message", (data) => {
       try {
         const { roomCode, userId, username, message, timestamp } = data;
-        
+
         if (!roomCode || !userId || !message) {
           console.warn("[CHAT_ERROR] Missing required fields");
           return;
@@ -385,7 +400,9 @@ function initSocketHandlers(io) {
 
         // Validate message length (prevent abuse)
         if (message.length > 500) {
-          socket.emit("error", { message: "Message too long (max 500 characters)" });
+          socket.emit("error", {
+            message: "Message too long (max 500 characters)",
+          });
           return;
         }
 
@@ -401,10 +418,10 @@ function initSocketHandlers(io) {
         if (!roomChatMessages.has(roomCode)) {
           roomChatMessages.set(roomCode, []);
         }
-        
+
         const messages = roomChatMessages.get(roomCode);
         messages.push(messageData);
-        
+
         // Keep only last 100 messages per room
         if (messages.length > 100) {
           messages.shift();
@@ -412,7 +429,9 @@ function initSocketHandlers(io) {
 
         // Broadcast message to all participants in the room
         io.to(roomCode).emit("chat:message", messageData);
-        console.log(`[CHAT] ${username} in room ${roomCode}: ${message.substring(0, 50)}...`);
+        console.log(
+          `[CHAT] ${username} in room ${roomCode}: ${message.substring(0, 50)}...`,
+        );
       } catch (error) {
         console.error("[CHAT_ERROR]", error);
         socket.emit("error", { message: "Failed to send message" });
@@ -552,6 +571,10 @@ async function handleUserDeparture(io, socket, isExplicit) {
     const roomResult = await db.getRoomByCode(roomCode);
     if (roomResult.success) {
       const room = roomResult.result;
+
+      // Log session end
+      await db.logSessionEnd(userId, room.id);
+
       await db.removeParticipant(room.id, userId);
 
       // Host Cleanup
@@ -597,8 +620,11 @@ function isAuthoritative(roomCode, userId) {
 
 function startRoomTimer(io, roomCode) {
   const timer = roomTimers.get(roomCode);
-  const config = roomTimerConfigs.get(roomCode) || { studyDuration: 25 * 60, breakDuration: 5 * 60 };
-  
+  const config = roomTimerConfigs.get(roomCode) || {
+    studyDuration: 25 * 60,
+    breakDuration: 5 * 60,
+  };
+
   if (!timer) return;
   stopRoomTimer(roomCode);
 
@@ -609,9 +635,12 @@ function startRoomTimer(io, roomCode) {
     } else {
       // Transition to next mode with configured durations
       timer.mode = timer.mode === "study" ? "break" : "study";
-      timer.timeRemaining = timer.mode === "study" ? config.studyDuration : config.breakDuration;
+      timer.timeRemaining =
+        timer.mode === "study" ? config.studyDuration : config.breakDuration;
       timer.totalTime = timer.timeRemaining;
-      console.log(`[TIMER] Room ${roomCode} transitioned to ${timer.mode} mode (${timer.timeRemaining}s)`);
+      console.log(
+        `[TIMER] Room ${roomCode} transitioned to ${timer.mode} mode (${timer.timeRemaining}s)`,
+      );
       io.to(roomCode).emit("timer:transitioned", getTimerPublicState(timer));
     }
   }, 1000);

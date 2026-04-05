@@ -16,6 +16,7 @@ import {
   showSignupPage,
   toggleAmbientSounds,
   showRoomPage,
+  showDashboardPage,
 } from "./modules/ui.js";
 import {
   handleLoginSubmit,
@@ -65,13 +66,26 @@ import {
   loadChatHistory,
   clearChat,
 } from "./modules/chat.js";
+import {
+  loadDashboard,
+  filterSessions,
+  editProfile,
+  closeEditProfile,
+  saveProfile,
+} from "./modules/dashboard.js";
 import { showNotification } from "./modules/utils.js";
-import { toggleSound, updateSoundVolume, loadSoundPreferences, stopAllSounds } from './modules/sound.js';
+import {
+  toggleSound,
+  updateSoundVolume,
+  loadSoundPreferences,
+  stopAllSounds,
+} from "./modules/sound.js";
 
 // Global access for HTML onclick handlers
 window.showLoginPage = showLoginPage;
 window.showSignupPage = showSignupPage;
 window.showHomePage = showHomePage;
+window.showLandingPage = showLandingPage;
 window.handleLoginSubmit = handleLoginSubmit;
 window.handleSignupSubmit = handleSignupSubmit;
 window.toggleAmbientSounds = toggleAmbientSounds;
@@ -102,32 +116,38 @@ window.sendChatMessage = sendChatMessage;
 window.showTimerSettings = showTimerSettings;
 window.closeTimerSettings = closeTimerSettings;
 window.saveTimerSettings = saveTimerSettings;
+window.showDashboardPage = showDashboardPage;
+window.loadDashboard = loadDashboard;
+window.filterSessions = filterSessions;
+window.editProfile = editProfile;
+window.closeEditProfile = closeEditProfile;
+window.saveProfile = saveProfile;
 
 /**
  * Switch between tabs (Tasks and Chat)
  */
-window.switchTab = function(tab) {
+window.switchTab = function (tab) {
   // Update tab buttons
-  const tasksTab = document.getElementById('tasksTab');
-  const chatTab = document.getElementById('chatTab');
-  
+  const tasksTab = document.getElementById("tasksTab");
+  const chatTab = document.getElementById("chatTab");
+
   // Update content visibility
-  const tasksContent = document.getElementById('tasksContent');
-  const chatContent = document.getElementById('chatContent');
-  
-  if (tab === 'tasks') {
-    tasksTab.classList.add('tab-active');
-    chatTab.classList.remove('tab-active');
-    tasksContent.style.display = 'block';
-    chatContent.style.display = 'none';
-  } else if (tab === 'chat') {
-    tasksTab.classList.remove('tab-active');
-    chatTab.classList.add('tab-active');
-    tasksContent.style.display = 'none';
-    chatContent.style.display = 'block';
+  const tasksContent = document.getElementById("tasksContent");
+  const chatContent = document.getElementById("chatContent");
+
+  if (tab === "tasks") {
+    tasksTab.classList.add("tab-active");
+    chatTab.classList.remove("tab-active");
+    tasksContent.style.display = "block";
+    chatContent.style.display = "none";
+  } else if (tab === "chat") {
+    tasksTab.classList.remove("tab-active");
+    chatTab.classList.add("tab-active");
+    tasksContent.style.display = "none";
+    chatContent.style.display = "block";
     // Focus chat input when switching to chat
     setTimeout(() => {
-      const chatInput = document.getElementById('chatInput');
+      const chatInput = document.getElementById("chatInput");
       if (chatInput) chatInput.focus();
     }, 0);
   }
@@ -221,20 +241,27 @@ function setupSocketEvents() {
   // We only set up these once
   const socket = initSocket();
 
-    socket.on('room:state', (state) => {
-        console.log('[SYNC] Received authoritative state:', state);
-        
-        const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail')?.split('@')[0] || "Guest";
-        
-        // Trust the server's isHost flag 100%
-        setSocketState(state.room ? state.room.room_code : null, username, state.isHost, state);
-        
-        updateRoomUI(state);
-        updateParticipants(state.participants || []);
-        updateTasksUI(state.tasks || []);
-        updateTimerUI(state.timer || {});
-        updateHostInfo();
-    });
+  socket.on("room:state", (state) => {
+    console.log("[SYNC] Received authoritative state:", state);
+
+    const username =
+      localStorage.getItem("currentUsername") ||
+      localStorage.getItem("userEmail")?.split("@")[0] || "Guest";
+
+    // Trust the server's isHost flag 100%
+    setSocketState(
+      state.room ? state.room.room_code : null,
+      username,
+      state.isHost,
+      state,
+    );
+
+    updateRoomUI(state);
+    updateParticipants(state.participants || []);
+    updateTasksUI(state.tasks || []);
+    updateTimerUI(state.timer || {});
+    updateHostInfo();
+  });
 
   socket.on("participant:joined", (data) => {
     const { roomState } = getSocketState();
@@ -266,18 +293,41 @@ function setupSocketEvents() {
 
   socket.on("timer:transitioned", (timerState) => {
     updateTimerUI(timerState);
-    
+
     // Play sound notification when transitioning (previous session ended)
     const previousMode = timerState.mode === "study" ? "break" : "study";
     playTimerEndSound(previousMode);
-    
+
     showNotification(
       `Mode changed to ${timerState.mode === "study" ? "Study" : "Break"}`,
     );
   });
 
   socket.on("timer:configured", (data) => {
-    showNotification(`⚙️ Host updated timer settings: Study ${data.studyDuration/60}min, Break ${data.breakDuration/60}min`);
+    showNotification(
+      `⚙️ Host updated timer settings: Study ${data.studyDuration / 60}min, Break ${data.breakDuration / 60}min`,
+    );
+  });
+
+  socket.on("chat:message", (data) => {
+    displayChatMessage(data);
+  });
+
+  socket.on("chat:history", (messages) => {
+    loadChatHistory(messages);
+  });
+
+  socket.on("host:transferred", (data) => {
+    showNotification(`${data.newHostName || "Another user"} is now the host`);
+  });
+
+  socket.on("participant:removed", (data) => {
+    showNotification("You have been removed from the room", true);
+    leaveRoom();
+  });
+
+  socket.on("participant:removed_from_room", (data) => {
+    showNotification(`${data.username || "A participant"} has been removed`);
   });
 
   socket.on("task:added", (task) => {
@@ -307,10 +357,10 @@ function setupSocketEvents() {
     }
   });
 
-    socket.on('room:closed', (data) => {
-        showNotification(data.message, true);
-        leaveRoom();
-    });
+  socket.on("room:closed", (data) => {
+    showNotification(data.message, true);
+    leaveRoom();
+  });
 }
 
 // Cleanup on page unload

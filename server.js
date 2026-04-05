@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3001;
 // MIDDLEWARE
 // ============================================
 
-app.use(express.json({ limit: "10kb" }));
+app.use(express.json({ limit: "50mb" }));
 app.use(express.static("public"));
 
 // Security headers
@@ -115,20 +115,71 @@ app.post("/api/rooms", verifyToken, async (req, res) => {
 });
 
 // Sound Preferences
-app.get('/api/user/sound-preferences', verifyToken, async (req, res) => {
-    const result = await db.getSoundPreferences(req.user.id);
-    if (!result.success) return res.status(400).json({ error: result.error });
-    res.json(result);
+app.get("/api/user/sound-preferences", verifyToken, async (req, res) => {
+  const result = await db.getSoundPreferences(req.user.id);
+  if (!result.success) return res.status(400).json({ error: result.error });
+  res.json(result);
 });
 
-app.put('/api/user/sound-preferences', verifyToken, async (req, res) => {
-    const { sound_preferences, volume_settings } = req.body;
-    if (!sound_preferences || !volume_settings) {
-        return res.status(400).json({ error: 'sound_preferences and volume_settings are required' });
+app.put("/api/user/sound-preferences", verifyToken, async (req, res) => {
+  const { sound_preferences, volume_settings } = req.body;
+  if (!sound_preferences || !volume_settings) {
+    return res
+      .status(400)
+      .json({ error: "sound_preferences and volume_settings are required" });
+  }
+  const result = await db.saveSoundPreferences(
+    req.user.id,
+    sound_preferences,
+    volume_settings,
+  );
+  if (!result.success) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+// User Profile & Dashboard
+app.get("/api/user-profile", verifyToken, async (req, res) => {
+  const result = await db.getUserProfile(req.user.id);
+  if (!result.success) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+app.get("/api/session-logs", verifyToken, async (req, res) => {
+  const limit = req.query.limit || 50;
+  const result = await db.getUserSessionLogs(req.user.id, limit);
+  if (!result.success) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+app.post("/api/update-profile", verifyToken, async (req, res) => {
+  const { display_name, username, profile_picture_url } = req.body;
+  const updates = {};
+
+  if (display_name !== undefined) {
+    if (!display_name || !display_name.trim()) {
+      return res.status(400).json({ error: "display_name cannot be empty" });
     }
-    const result = await db.saveSoundPreferences(req.user.id, sound_preferences, volume_settings);
-    if (!result.success) return res.status(400).json({ error: result.error });
-    res.json(result);
+    updates.display_name = display_name.trim();
+  }
+
+  if (username !== undefined) {
+    if (!username || !username.trim()) {
+      return res.status(400).json({ error: "username cannot be empty" });
+    }
+    updates.username = username.trim();
+  }
+
+  if (profile_picture_url !== undefined && profile_picture_url) {
+    updates.profile_picture_url = profile_picture_url;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "No fields to update" });
+  }
+
+  const result = await db.updateUserProfile(req.user.id, updates);
+  if (!result.success) return res.status(400).json({ error: result.error });
+  res.json(result);
 });
 
 // Initialize Sockets
