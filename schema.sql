@@ -9,8 +9,10 @@ CREATE TABLE user_profiles (
   id UUID PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,
   username VARCHAR(255) UNIQUE,
+  display_name VARCHAR(255),
   full_name VARCHAR(255),
   avatar_url VARCHAR(255),
+  profile_picture_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

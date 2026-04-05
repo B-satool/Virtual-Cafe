@@ -32,7 +32,6 @@ async function signUp(email, password, username, fullName) {
 
     // Create user profile in database
     // Use .insert() instead of .upsert() to catch duplicates
-    const username = fullName.toLowerCase().replace(/\s+/g, ".");
     const { data: profileData, error: profileError } = await supabase
       .from("user_profiles")
       .insert(
@@ -41,8 +40,8 @@ async function signUp(email, password, username, fullName) {
             id: userId,
             email,
             username,
-            display_name: fullName,
-            username: username,
+            display_name: username,
+            full_name: fullName,
             avatar_url: null,
             profile_picture_url: null,
           },
