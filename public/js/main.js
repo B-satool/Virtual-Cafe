@@ -66,6 +66,7 @@ import {
   clearChat,
 } from "./modules/chat.js";
 import { showNotification } from "./modules/utils.js";
+import { toggleSound, updateSoundVolume, loadSoundPreferences, stopAllSounds } from './modules/sound.js';
 
 // Global access for HTML onclick handlers
 window.showLoginPage = showLoginPage;
@@ -74,6 +75,8 @@ window.showHomePage = showHomePage;
 window.handleLoginSubmit = handleLoginSubmit;
 window.handleSignupSubmit = handleSignupSubmit;
 window.toggleAmbientSounds = toggleAmbientSounds;
+window.toggleSound = toggleSound;
+window.updateSoundVolume = updateSoundVolume;
 window.joinRoom = (roomCode) => {
   const username =
     localStorage.getItem("currentUsername") ||
@@ -218,27 +221,20 @@ function setupSocketEvents() {
   // We only set up these once
   const socket = initSocket();
 
-  socket.on("room:state", (state) => {
-    console.log("[SYNC] Received authoritative state:", state);
-
-    const username =
-      localStorage.getItem("currentUsername") ||
-      localStorage.getItem("userEmail").split("@")[0];
-
-    // Trust the server's isHost flag 100%
-    setSocketState(
-      state.room ? state.room.room_code : null,
-      username,
-      state.isHost,
-      state,
-    );
-
-    updateRoomUI(state);
-    updateParticipants(state.participants || []);
-    updateTasksUI(state.tasks || []);
-    updateTimerUI(state.timer || {});
-    updateHostInfo();
-  });
+    socket.on('room:state', (state) => {
+        console.log('[SYNC] Received authoritative state:', state);
+        
+        const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail').split('@')[0];
+        
+        // Trust the server's isHost flag 100%
+        setSocketState(state.room ? state.room.room_code : null, username, state.isHost, state);
+        
+        updateRoomUI(state);
+        updateParticipants(state.participants || []);
+        updateTasksUI(state.tasks || []);
+        updateTimerUI(state.timer || {});
+        updateHostInfo();
+    });
 
   socket.on("participant:joined", (data) => {
     const { roomState } = getSocketState();
@@ -311,40 +307,10 @@ function setupSocketEvents() {
     }
   });
 
-  socket.on("room:closed", (data) => {
-    showNotification(data.message, true);
-    leaveRoom();
-  });
-
-  socket.on("host:transferred", (data) => {
-    showNotification(
-      `Host role transferred to ${data.newHostUsername || "another user"}!`,
-    );
-  });
-
-  socket.on("participant:removed", (data) => {
-    showNotification(
-      data.message || "You have been removed from the room",
-      true,
-    );
-    leaveRoom();
-  });
-
-  socket.on("participant:removed_from_room", (data) => {
-    showNotification(
-      `${data.username || "A participant"} was removed from the room`,
-    );
-  });
-
-  socket.on("chat:message", (data) => {
-    displayChatMessage(data);
-  });
-
-  socket.on("chat:history", (data) => {
-    if (data.messages) {
-      loadChatHistory(data.messages);
-    }
-  });
+    socket.on('room:closed', (data) => {
+        showNotification(data.message, true);
+        leaveRoom();
+    });
 }
 
 // Cleanup on page unload
