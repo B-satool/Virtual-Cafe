@@ -94,7 +94,7 @@ app.get("/api/auth/verify", verifyToken, (req, res) => {
 });
 
 // Rooms
-app.get("/api/rooms", verifyToken, async (req, res) => {
+app.get("/api/rooms/public", verifyToken, async (req, res) => {
   const result = await db.getPublicRooms();
   if (!result.success) return res.status(400).json({ error: result.error });
 
@@ -108,10 +108,19 @@ app.get("/api/rooms", verifyToken, async (req, res) => {
     };
   });
 
-  res.json({ ...result, result: enriched });
+  res.json({ success: true, rooms: enriched });
 });
 
-app.post("/api/rooms", verifyToken, async (req, res) => {
+app.post("/api/rooms/join", verifyToken, async (req, res) => {
+  const { room_code, user_id } = req.body;
+  const result = await db.getRoomByCode(room_code);
+  if (!result.success) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+  res.json({ success: true, room: result.result });
+});
+
+app.post("/api/rooms/create", verifyToken, async (req, res) => {
   const { roomName, isPublic, capacity } = req.body;
   const roomCode = Math.floor(100000 + Math.random() * 900000).toString();
   const result = await db.createRoom(
@@ -122,7 +131,7 @@ app.post("/api/rooms", verifyToken, async (req, res) => {
     req.user.id,
   );
   if (!result.success) return res.status(400).json({ error: result.error });
-  res.status(201).json(result.result);
+  res.status(201).json({ success: true, room: result.result });
 });
 
 // Sound Preferences
