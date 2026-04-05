@@ -107,6 +107,23 @@ app.post('/api/rooms', verifyToken, async (req, res) => {
     res.status(201).json(result.result);
 });
 
+// Sound Preferences
+app.get('/api/user/sound-preferences', verifyToken, async (req, res) => {
+    const result = await db.getSoundPreferences(req.user.id);
+    if (!result.success) return res.status(400).json({ error: result.error });
+    res.json(result);
+});
+
+app.put('/api/user/sound-preferences', verifyToken, async (req, res) => {
+    const { sound_preferences, volume_settings } = req.body;
+    if (!sound_preferences || !volume_settings) {
+        return res.status(400).json({ error: 'sound_preferences and volume_settings are required' });
+    }
+    const result = await db.saveSoundPreferences(req.user.id, sound_preferences, volume_settings);
+    if (!result.success) return res.status(400).json({ error: result.error });
+    res.json(result);
+});
+
 // Initialize Sockets
 initSocketHandlers(io);
 

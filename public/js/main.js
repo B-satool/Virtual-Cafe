@@ -16,6 +16,7 @@ import {
 import { updateTimerUI, startTimer, pauseTimer, resumeTimer, resetTimer } from './modules/timer.js';
 import { addTask, updateTaskCompletion, deleteTask, updateTasksUI } from './modules/tasks.js';
 import { showNotification } from './modules/utils.js';
+import { toggleSound, updateSoundVolume, loadSoundPreferences, stopAllSounds } from './modules/sound.js';
 
 // Global access for HTML onclick handlers
 window.showLoginPage = showLoginPage;
@@ -24,6 +25,8 @@ window.showHomePage = showHomePage;
 window.handleLoginSubmit = handleLoginSubmit;
 window.handleSignupSubmit = handleSignupSubmit;
 window.toggleAmbientSounds = toggleAmbientSounds;
+window.toggleSound = toggleSound;
+window.updateSoundVolume = updateSoundVolume;
 window.joinRoom = (roomCode) => {
     const username = localStorage.getItem('currentUsername') || localStorage.getItem('userEmail').split('@')[0];
     joinRoomWithUsername(roomCode, username);
@@ -133,6 +136,9 @@ function setupSocketEvents() {
         updateTasksUI(state.tasks || []);
         updateTimerUI(state.timer || {});
         updateHostInfo();
+
+        // Load saved sound preferences when entering a room
+        loadSoundPreferences();
     });
 
     socket.on('participant:joined', (data) => {
@@ -195,6 +201,7 @@ function setupSocketEvents() {
 
     socket.on('room:closed', (data) => {
         showNotification(data.message, true);
+        stopAllSounds();
         leaveRoom();
     });
 }

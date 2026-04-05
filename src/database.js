@@ -612,6 +612,53 @@ async function deleteJoinRequest(roomId, userId) {
     }
 }
 
+// ============================================
+// USER SETTINGS / SOUND PREFERENCES
+// ============================================
+
+async function getSoundPreferences(userId) {
+    try {
+        const { data, error } = await supabase
+            .from('user_settings')
+            .select('sound_preferences, volume_settings')
+            .eq('user_id', userId)
+            .single();
+
+        if (error && error.code === 'PGRST116') {
+            // No row found — return defaults
+            return { success: true, result: null };
+        }
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function saveSoundPreferences(userId, soundPreferences, volumeSettings) {
+    try {
+        const { data, error } = await supabase
+            .from('user_settings')
+            .upsert([{
+                user_id: userId,
+                sound_preferences: soundPreferences,
+                volume_settings: volumeSettings
+            }], { onConflict: 'user_id' })
+            .select();
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, result: data[0] };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
 // Export all functions
 module.exports = {
     // Auth
@@ -649,5 +696,8 @@ module.exports = {
     getJoinRequests,
     approveJoinRequest,
     rejectJoinRequest,
-    deleteJoinRequest
+    deleteJoinRequest,
+    // Sound Preferences
+    getSoundPreferences,
+    saveSoundPreferences
 };

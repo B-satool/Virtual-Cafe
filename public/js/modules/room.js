@@ -6,6 +6,7 @@ import { getSocket, initSocket, setSocketState, getSocketState, disconnectSocket
 import { showRoomPage, showLandingPage, showHomePage, showWaitingRoom, hideAllPages } from './ui.js';
 import { showNotification, escapeHtml, sanitizeInput } from './utils.js';
 import { createNewRoom, loadPublicRooms } from './api.js';
+import { stopAllSounds } from './sound.js';
 
 /**
  * Update the room UI with current state
@@ -158,6 +159,7 @@ export function leaveRoom() {
     localStorage.removeItem('currentUsername');
     localStorage.removeItem('isRoomHost');
 
+    stopAllSounds();
     showLandingPage();
     loadPublicRooms();
     
