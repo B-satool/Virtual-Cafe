@@ -33,7 +33,19 @@ export async function loadPublicRooms() {
             return;
         }
 
-        roomsList.innerHTML = rooms.map(room => `
+        roomsList.innerHTML = rooms.map(room => {
+            let statusClass, statusText;
+            if (room.timer_mode === 'study') {
+                statusClass = 'status-studying';
+                statusText = room.timer_running ? '📚 Studying' : '📚 Study Mode';
+            } else if (room.timer_mode === 'break') {
+                statusClass = 'status-break';
+                statusText = room.timer_running ? '☕ On Break' : '☕ Break Mode';
+            } else {
+                statusClass = 'status-idle';
+                statusText = '⏸ Waiting to Start';
+            }
+            return `
             <div class="room-item" onclick="window.joinRoom('${room.room_code}')">
                 <div class="room-item-info">
                     <div style="display: flex; flex-direction: column;">
@@ -42,12 +54,12 @@ export async function loadPublicRooms() {
                     </div>
                     <span class="room-item-count">👥 ${room.participant_count || 0}/${room.capacity}</span>
                 </div>
-                <div class="room-status ${room.timer_mode === 'study' ? 'status-studying' : 'status-break'}">
-                    ${room.timer_mode === 'study' ? '📚 Studying' : '☕ On Break'}
+                <div class="room-status ${statusClass}">
+                    ${statusText}
                     ${room.requires_approval ? '🔒 Private' : '🔓 Public'}
                 </div>
             </div>
-        `).join('');
+        `;}).join('');
 
     } catch (error) {
         console.error('Error loading rooms:', error);

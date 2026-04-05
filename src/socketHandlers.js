@@ -664,3 +664,13 @@ function getTimerPublicState(timer) {
 }
 
 module.exports = initSocketHandlers;
+
+/**
+ * Returns the current in-memory timer state for a given room code.
+ * Used by REST API to show live room status in the public rooms list.
+ */
+module.exports.getRoomTimerState = (roomCode) => {
+  const timer = roomTimers.get(roomCode);
+  if (!timer) return null;
+  return getTimerPublicState(timer);
+};
