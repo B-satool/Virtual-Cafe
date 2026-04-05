@@ -97,7 +97,18 @@ app.get("/api/auth/verify", verifyToken, (req, res) => {
 app.get("/api/rooms", verifyToken, async (req, res) => {
   const result = await db.getPublicRooms();
   if (!result.success) return res.status(400).json({ error: result.error });
-  res.json(result);
+
+  // Enrich each room with live timer state from in-memory map
+  const enriched = (result.result || []).map((room) => {
+    const timerState = initSocketHandlers.getRoomTimerState(room.room_code);
+    return {
+      ...room,
+      timer_mode: timerState ? timerState.mode : 'idle',
+      timer_running: timerState ? timerState.isRunning : false,
+    };
+  });
+
+  res.json({ ...result, result: enriched });
 });
 
 app.post("/api/rooms", verifyToken, async (req, res) => {
