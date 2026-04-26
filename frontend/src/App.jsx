@@ -18,11 +18,13 @@ function AppContent() {
   const room = React.useContext(RoomContext);
   const socket = React.useContext(SocketContext);
 
+  const [showHero, setShowHero] = useState(true);
+
   // Determine which page to show
   const renderPage = () => {
     // First time visitor - show home page
-    if (!auth.isAuthenticated && !auth.user) {
-      return <HomePage />;
+    if (showHero && !auth.isAuthenticated && !auth.user) {
+      return <HomePage onGetStarted={() => setShowHero(false)} />;
     }
 
     // Not authenticated - show auth page

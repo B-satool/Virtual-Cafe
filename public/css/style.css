@@ -235,6 +235,27 @@ button:disabled {
   margin-top: 10px;
 }
 
+.home-auth-links {
+  margin-top: 20px;
+  font-size: 0.9em;
+  color: #8d6e63;
+}
+
+.home-auth-links a {
+  color: #6d4c41;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.home-auth-links a:hover {
+  text-decoration: underline;
+}
+
+.home-auth-links .divider {
+  margin: 0 10px;
+  opacity: 0.5;
+}
+
 /* Room Page */
 .room-page {
   display: none;

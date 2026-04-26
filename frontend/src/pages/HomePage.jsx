@@ -1,6 +1,6 @@
 import React from "react";
 
-export const HomePage = () => {
+export const HomePage = ({ onGetStarted }) => {
   return (
     <div className="home-page">
       <div className="hero-section">
@@ -37,7 +37,7 @@ export const HomePage = () => {
         </div>
 
         <div className="cta-button">
-          <button className="btn btn-primary btn-large">Get Started</button>
+          <button onClick={onGetStarted} className="btn btn-primary btn-large">Get Started</button>
         </div>
       </div>
 

@@ -121,6 +121,9 @@ window.loadDashboard = loadDashboard;
 window.filterSessions = filterSessions;
 window.editProfile = editProfile;
 window.closeEditProfile = closeEditProfile;
+window.showGetStarted = () => {
+  showSignupPage();
+};
 window.saveProfile = saveProfile;
 
 /**
