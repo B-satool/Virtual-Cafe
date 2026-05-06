@@ -8,6 +8,7 @@ export const LandingPage = ({
   currentUser,
   loading,
   error,
+  logout,
 }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [roomName, setRoomName] = useState("");
@@ -63,9 +64,19 @@ export const LandingPage = ({
   return (
     <div className="landing-page">
       <header className="landing-header">
-        <h1>☕ Virtual Café</h1>
-        <div className="user-info">
-          <span>Welcome, {currentUser?.username || "Guest"}</span>
+        <div className="header-left">
+          <h1>☕ Virtual Café</h1>
+          <div className="user-info">
+            <span>Welcome, {currentUser?.username || "Guest"}</span>
+          </div>
+        </div>
+        <div className="header-buttons">
+          <button className="btn btn-primary" title="View your profile and session history">
+            👤 Dashboard
+          </button>
+          <button className="btn btn-secondary" onClick={logout}>
+            Logout
+          </button>
         </div>
       </header>
 
@@ -242,17 +253,50 @@ export const LandingPage = ({
           justify-content: space-between;
           align-items: center;
           border-bottom: 3px solid #d4845c;
+          gap: 20px;
+        }
+
+        .header-left {
+          flex: 1;
         }
 
         .landing-header h1 {
           font-size: 1.8em;
           color: #5c4033;
-          margin: 0;
+          margin: 0 0 5px 0;
         }
 
         .user-info {
           color: #8d6e63;
           font-weight: 500;
+          font-size: 0.95em;
+        }
+
+        .header-buttons {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+
+        .header-buttons .btn {
+          padding: 10px 16px;
+          font-size: 0.95em;
+          white-space: nowrap;
+        }
+
+        .header-buttons .btn-primary {
+          background: linear-gradient(135deg, #d4845c 0%, #c9703a 100%);
+          color: white;
+        }
+
+        .header-buttons .btn-secondary {
+          background: #8d6e63;
+          color: white;
+          border: none;
+        }
+
+        .header-buttons .btn-secondary:hover {
+          background: #7d5e5a;
         }
 
         .landing-content {

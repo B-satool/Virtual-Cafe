@@ -25,7 +25,7 @@ export const useAuth = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
 
-      localStorage.setItem("userToken", data.token);
+      localStorage.setItem("userToken", data.accessToken);
       localStorage.setItem("userId", data.userId);
       localStorage.setItem("username", data.username || email.split("@")[0]);
 
@@ -55,7 +55,7 @@ export const useAuth = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Signup failed");
 
-      localStorage.setItem("userToken", data.token);
+      localStorage.setItem("userToken", data.accessToken);
       localStorage.setItem("userId", data.userId);
       localStorage.setItem("username", username);
 

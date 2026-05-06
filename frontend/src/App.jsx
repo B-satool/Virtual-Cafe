@@ -65,6 +65,7 @@ function AppContent() {
         currentUser={auth.user}
         loading={room.loading}
         error={room.error}
+        logout={auth.logout}
       />
     );
   };

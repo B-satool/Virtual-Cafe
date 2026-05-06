@@ -124,7 +124,7 @@ export const AuthPage = ({
       <style>{`
         .auth-page {
           min-height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: linear-gradient(135deg, #f5e6d3 0%, #e8cdb3 100%);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -140,9 +140,10 @@ export const AuthPage = ({
         .auth-box {
           background: white;
           padding: 40px;
-          border-radius: 10px;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+          border-radius: 20px;
+          box-shadow: 0 15px 50px rgba(0, 0, 0, 0.12);
           position: relative;
+          border: 1px solid rgba(139, 111, 71, 0.1);
         }
 
         .back-button {
@@ -151,7 +152,7 @@ export const AuthPage = ({
           left: 15px;
           background: none;
           border: none;
-          color: #667eea;
+          color: #8B6F47;
           font-weight: 600;
           cursor: pointer;
           padding: 8px 12px;
@@ -161,26 +162,26 @@ export const AuthPage = ({
         }
 
         .back-button:hover {
-          background: #f0f0f0;
+          background: rgba(139, 111, 71, 0.08);
         }
 
         .auth-box h1 {
           font-size: 2rem;
           margin-bottom: 10px;
           text-align: center;
-          color: #333;
+          color: #8B6F47;
         }
 
         .auth-box h2 {
           font-size: 1.3rem;
           margin-bottom: 30px;
           text-align: center;
-          color: #666;
+          color: #A0826D;
           font-weight: 600;
         }
 
         .error-message {
-          background: #fee;
+          background: #fef3f1;
           color: #c33;
           padding: 10px 15px;
           border-radius: 5px;
@@ -196,7 +197,7 @@ export const AuthPage = ({
         .form-group label {
           display: block;
           margin-bottom: 8px;
-          color: #333;
+          color: #5c4d42;
           font-weight: 600;
           font-size: 0.95rem;
         }
@@ -204,24 +205,25 @@ export const AuthPage = ({
         .form-group input {
           width: 100%;
           padding: 12px;
-          border: 2px solid #e0e0e0;
-          border-radius: 5px;
+          border: 2px solid #e8d5c4;
+          border-radius: 8px;
           font-size: 1rem;
           transition: border-color 0.3s;
           box-sizing: border-box;
+          background: #fefbf8;
         }
 
         .form-group input:focus {
           outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          border-color: #8B6F47;
+          box-shadow: 0 0 0 3px rgba(139, 111, 71, 0.1);
         }
 
         .btn {
           width: 100%;
           padding: 12px;
           border: none;
-          border-radius: 5px;
+          border-radius: 8px;
           font-size: 1rem;
           font-weight: 600;
           cursor: pointer;
@@ -229,13 +231,13 @@ export const AuthPage = ({
         }
 
         .btn-primary {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: linear-gradient(135deg, #B8956A 0%, #A0826D 100%);
           color: white;
         }
 
         .btn-primary:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+          box-shadow: 0 10px 25px rgba(139, 111, 71, 0.25);
         }
 
         .btn:disabled {
@@ -249,14 +251,14 @@ export const AuthPage = ({
         }
 
         .auth-toggle p {
-          color: #666;
+          color: #8A7560;
           font-size: 0.95rem;
         }
 
         .toggle-btn {
           background: none;
           border: none;
-          color: #667eea;
+          color: #8B6F47;
           font-weight: 600;
           cursor: pointer;
           text-decoration: none;

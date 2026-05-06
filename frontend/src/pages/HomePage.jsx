@@ -1,9 +1,9 @@
 import React from "react";
-import AuthPage from "./AuthPage";
+import { AuthPage } from "./AuthPage";
 import { useAuth } from "../hooks/useAuth";
 
 export const HomePage = () => {
-  const { setAuthPage } = useAuth();
+  const { setAuthPage, login, signup, loading, error, clearError } = useAuth();
   const [showAuth, setShowAuth] = React.useState(false);
   const [authMode, setAuthMode] = React.useState("login");
 
@@ -20,7 +20,7 @@ export const HomePage = () => {
   };
 
   if (showAuth) {
-    return <AuthPage onBack={() => setShowAuth(false)} />;
+    return <AuthPage onBack={() => setShowAuth(false)} login={login} signup={signup} loading={loading} error={error} clearError={clearError} />;
   }
 
   return (
@@ -31,10 +31,6 @@ export const HomePage = () => {
           title="3D Café Model"
           frameBorder="0"
           allow="autoplay; fullscreen; xr-spatial-tracking"
-          xr-spatial-tracking
-          execution-while-out-of-viewport
-          execution-while-not-rendered
-          web-share
           src="https://sketchfab.com/models/365da75edfa743db9af0b0113ce762f2/embed"
           style={{
             width: "100%",
@@ -62,7 +58,7 @@ export const HomePage = () => {
 
           {/* Tagline */}
           <div className="tagline-section">
-            <h1 className="app-title">Virtual Café</h1>
+            <h1 className="app-title">GrindSpace</h1>
             <p className="app-tagline">
               Collaborate. Study. Thrive Together.
             </p>
