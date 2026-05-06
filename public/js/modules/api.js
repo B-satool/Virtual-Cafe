@@ -72,21 +72,28 @@ export async function loadPublicRooms() {
  */
 export async function createNewRoom(roomData) {
     try {
-        const response = await fetch('/api/rooms', {
+        console.log("✓ createNewRoom called with:", roomData);
+        console.log("✓ headers:", getHeaders(true));
+        
+        const response = await fetch('/api/rooms/create', {
             method: 'POST',
             headers: getHeaders(true),
             body: JSON.stringify(roomData)
         });
         
+        console.log("✓ fetch response received, status:", response.status);
+        
         const data = await response.json();
+        console.log("✓ response data:", data);
         
         if (!response.ok) {
             throw new Error(data.error || 'Failed to create room');
         }
         
+        console.log("✓ returning data:", data);
         return data;
     } catch (error) {
-        console.error('Create room error:', error);
+        console.error('❌ Create room error:', error);
         throw error;
     }
 }

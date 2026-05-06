@@ -3,6 +3,7 @@
  */
 
 import { getSocket, getSocketState } from "./socket.js";
+import { updateTimerUI } from "./timer.js";
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -116,10 +117,23 @@ export function saveTimerSettings() {
       studyDuration: studyMinutes * 60,
       breakDuration: breakMinutes * 60,
     });
+
+    // Reset the timer with new settings
+    setTimeout(() => {
+      socket.emit("timer:reset");
+    }, 100);
   }
 
+  // Immediately update the timer display with new settings
+  updateTimerUI({
+    timeRemaining: studyMinutes * 60, // Show new study duration
+    mode: "study",
+    isRunning: false,
+    totalTime: studyMinutes * 60,
+  });
+
   closeTimerSettings();
-  alert("Timer settings updated! Next timer reset will use the new durations.");
+  alert("Timer settings updated!");
 }
 
 /**

@@ -217,6 +217,39 @@ async function updateUserProfile(userId, updates) {
   }
 }
 
+async function uploadProfilePicture(userId, file) {
+  try {
+    if (!file) {
+      return { success: false, error: "No file provided" };
+    }
+
+    const path = require("path");
+    const fs = require("fs").promises;
+
+    // Create uploads directory if it doesn't exist
+    const uploadsDir = path.join(__dirname, "../public/uploads/profile-pictures");
+    await fs.mkdir(uploadsDir, { recursive: true });
+
+    // Generate unique file name
+    const fileExt = file.originalname.split(".").pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = path.join(uploadsDir, fileName);
+
+    // Save file to local filesystem
+    await fs.writeFile(filePath, file.buffer);
+
+    // Return public URL
+    const publicUrl = `/uploads/profile-pictures/${fileName}`;
+
+    return {
+      success: true,
+      url: publicUrl,
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
 // ============================================
 // ROOM FUNCTIONS
 // ============================================
@@ -863,6 +896,7 @@ module.exports = {
   // User Profile
   getUserProfile,
   updateUserProfile,
+  uploadProfilePicture,
   // Rooms
   createRoom,
   getRoomByCode,

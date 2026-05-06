@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const socketIO = require("socket.io");
+const multer = require("multer");
 const db = require("./src/database");
 const initSocketHandlers = require("./src/socketHandlers");
 
@@ -16,6 +17,19 @@ const io = socketIO(server, {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// Configure multer for file uploads (store in memory)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
 
 // ============================================
 // MIDDLEWARE
@@ -199,6 +213,16 @@ app.post("/api/update-profile", verifyToken, async (req, res) => {
 
   const result = await db.updateUserProfile(req.user.id, updates);
   if (!result.success) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+// Upload profile picture to Supabase Storage
+app.post("/api/upload-profile-picture", verifyToken, upload.single("file"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: "No file provided" });
+  }
+  const result = await db.uploadProfilePicture(req.user.id, req.file);
+  if (!result.success) return res.status(400).json({ success: false, error: result.error });
   res.json(result);
 });
 

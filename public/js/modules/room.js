@@ -217,9 +217,12 @@ export function removeParticipant(userId) {
  * Handle room creation flow
  */
 export async function handleCreateRoom() {
+  console.log("✓ handleCreateRoom called");
   const roomNameInput = document.getElementById("roomName");
   const capacityInput = document.getElementById("capacity");
   const isPublicInput = document.getElementById("isPublic");
+
+  console.log("Elements found:", { roomNameInput, capacityInput, isPublicInput });
 
   const roomName = roomNameInput.value.trim();
   if (!roomName) {
@@ -235,13 +238,21 @@ export async function handleCreateRoom() {
       createdBy: localStorage.getItem("userId"),
     };
 
+    console.log("Room data:", roomData);
+
     const username = localStorage.getItem("currentUsername") || localStorage.getItem("userEmail")?.split("@")[0] || "Guest";
     const data = await createNewRoom(roomData);
 
-    if (data.room_code) {
-      await joinRoomWithUsername(data.room_code, username, true);
+    console.log("✓ Room created, data:", data);
+
+    if (data.room && data.room.room_code) {
+      console.log("✓ Joining room with code:", data.room.room_code);
+      await joinRoomWithUsername(data.room.room_code, username, true);
+    } else {
+      console.error("❌ No room_code in response");
     }
   } catch (error) {
+    console.error("Error in handleCreateRoom:", error);
     showNotification(error.message, true);
   }
 }

@@ -295,16 +295,36 @@ export async function saveProfile() {
         return;
       }
 
-      // Convert file to base64 synchronously
-      const reader = new FileReader();
-      await new Promise((resolve, reject) => {
-        reader.onload = (e) => {
-          updates.profile_picture_url = e.target.result;
-          resolve();
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      try {
+        // Upload to Supabase Storage
+        const fileExt = file.name.split(".").pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `profile-pictures/${fileName}`;
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("filePath", filePath);
+
+        const uploadRes = await fetch("/api/upload-profile-picture", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+          body: formData,
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadData.success) {
+          alert("Error uploading image: " + uploadData.error);
+          return;
+        }
+
+        updates.profile_picture_url = uploadData.url;
+      } catch (error) {
+        console.error("Error uploading profile picture:", error);
+        alert("Error uploading profile picture: " + error.message);
+        return;
+      }
     }
 
     await submitProfileUpdate(updates);
