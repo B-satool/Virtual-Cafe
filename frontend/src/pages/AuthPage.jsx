@@ -7,6 +7,7 @@ export const AuthPage = ({
   error,
   clearError,
   setAuthPage,
+  onBack,
 }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -43,6 +44,15 @@ export const AuthPage = ({
     <div className="auth-page">
       <div className="auth-container">
         <div className="auth-box">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="back-button"
+              title="Back to home"
+            >
+              ← Back
+            </button>
+          )}
           <h1>☕ Virtual Café</h1>
           <h2>{isLogin ? "Welcome Back" : "Join Us"}</h2>
 
@@ -132,6 +142,26 @@ export const AuthPage = ({
           padding: 40px;
           border-radius: 10px;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+          position: relative;
+        }
+
+        .back-button {
+          position: absolute;
+          top: 15px;
+          left: 15px;
+          background: none;
+          border: none;
+          color: #667eea;
+          font-weight: 600;
+          cursor: pointer;
+          padding: 8px 12px;
+          border-radius: 5px;
+          transition: all 0.3s ease;
+          font-size: 0.9rem;
+        }
+
+        .back-button:hover {
+          background: #f0f0f0;
         }
 
         .auth-box h1 {

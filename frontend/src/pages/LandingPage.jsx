@@ -91,16 +91,16 @@ export const LandingPage = ({
           <h2>Available Rooms</h2>
           {loading ? (
             <p className="loading">Loading rooms...</p>
-          ) : rooms.length === 0 ? (
+          ) : rooms && rooms.length === 0 ? (
             <p className="no-rooms">
               No public rooms available. Create one to get started!
             </p>
           ) : (
             <div className="rooms-grid">
-              {rooms.map((room) => (
+              {rooms && rooms.map((room) => (
                 <div key={room.id} className="room-card">
                   <div className="room-header">
-                    <h3>{room.name}</h3>
+                    <h3>{room.room_name || room.name}</h3>
                     <span
                       className={`room-status ${room.is_private ? "private" : "public"}`}
                     >
@@ -112,20 +112,15 @@ export const LandingPage = ({
                       <strong>Code:</strong> {room.room_code}
                     </p>
                     <p>
-                      <strong>Participants:</strong>{" "}
-                      {room.participant_count || 0} / {room.capacity}
+                      <strong>Capacity:</strong> {room.capacity}
                     </p>
                   </div>
                   <button
                     className="btn btn-small"
                     onClick={() => handleJoinFromList(room)}
-                    disabled={
-                      joiningRoom || room.participant_count >= room.capacity
-                    }
+                    disabled={joiningRoom}
                   >
-                    {room.participant_count >= room.capacity
-                      ? "Room Full"
-                      : "Join"}
+                    Join
                   </button>
                 </div>
               ))}
@@ -235,83 +230,75 @@ export const LandingPage = ({
       <style>{`
         .landing-page {
           min-height: 100vh;
-          background: #f5f5f5;
+          background: linear-gradient(135deg, #f5e6d3 0%, #e8cdb3 100%);
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         .landing-header {
           background: white;
-          padding: 20px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          padding: 20px 40px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
           display: flex;
           justify-content: space-between;
           align-items: center;
+          border-bottom: 3px solid #d4845c;
         }
 
         .landing-header h1 {
+          font-size: 1.8em;
+          color: #5c4033;
           margin: 0;
-          font-size: 1.8rem;
         }
 
         .user-info {
-          color: #666;
+          color: #8d6e63;
+          font-weight: 500;
         }
 
         .landing-content {
           max-width: 1200px;
-          margin: 40px auto;
-          padding: 0 20px;
+          margin: 0 auto;
+          padding: 40px 20px;
         }
 
         .action-buttons {
           display: flex;
           gap: 15px;
           margin-bottom: 40px;
+          flex-wrap: wrap;
         }
 
         .btn {
-          padding: 12px 20px;
+          padding: 12px 24px;
           border: none;
-          border-radius: 5px;
-          font-size: 1rem;
+          border-radius: 8px;
+          font-size: 1em;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s ease;
         }
 
         .btn-primary {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: linear-gradient(135deg, #d4845c 0%, #c9703a 100%);
           color: white;
+          box-shadow: 0 4px 12px rgba(212, 132, 92, 0.3);
+        }
+
+        .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(212, 132, 92, 0.4);
         }
 
         .btn-secondary {
-          background: #fff;
-          color: #667eea;
-          border: 2px solid #667eea;
+          background: white;
+          color: #d4845c;
+          border: 2px solid #d4845c;
+          box-shadow: 0 4px 12px rgba(212, 132, 92, 0.15);
         }
 
-        .btn:hover:not(:disabled) {
+        .btn-secondary:hover {
+          background: #fef9f6;
           transform: translateY(-2px);
-          box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        .btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .btn-small {
-          padding: 8px 16px;
-          font-size: 0.9rem;
-        }
-
-        .error-message {
-          background: #fee;
-          color: #c33;
-          padding: 15px;
-          border-radius: 5px;
-          margin-bottom: 20px;
-          border-left: 4px solid #c33;
         }
 
         .rooms-section {
@@ -319,16 +306,9 @@ export const LandingPage = ({
         }
 
         .rooms-section h2 {
-          margin-bottom: 20px;
-          color: #333;
-        }
-
-        .loading,
-        .no-rooms {
-          text-align: center;
-          color: #999;
-          padding: 40px 20px;
-          font-size: 1.1rem;
+          font-size: 1.8em;
+          color: #5c4033;
+          margin-bottom: 25px;
         }
 
         .rooms-grid {
@@ -339,36 +319,36 @@ export const LandingPage = ({
 
         .room-card {
           background: white;
+          border-radius: 12px;
           padding: 20px;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
           transition: all 0.3s ease;
         }
 
         .room-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+          transform: translateY(-4px);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
         }
 
         .room-header {
           display: flex;
           justify-content: space-between;
           align-items: start;
-          margin-bottom: 15px;
+          margin-bottom: 12px;
         }
 
         .room-header h3 {
           margin: 0;
-          color: #333;
-          flex: 1;
+          color: #5c4033;
+          font-size: 1.2em;
         }
 
         .room-status {
-          display: inline-block;
-          padding: 4px 8px;
-          border-radius: 3px;
-          font-size: 0.8rem;
-          font-weight: 600;
+          font-size: 0.8em;
+          padding: 4px 12px;
+          border-radius: 6px;
+          background: #f0f0f0;
+          color: #666;
         }
 
         .room-status.public {
@@ -382,13 +362,42 @@ export const LandingPage = ({
         }
 
         .room-details {
-          color: #666;
-          font-size: 0.9rem;
           margin-bottom: 15px;
+          color: #8d6e63;
         }
 
         .room-details p {
-          margin: 5px 0;
+          margin: 8px 0;
+          font-size: 0.95em;
+        }
+
+        .btn-small {
+          width: 100%;
+          padding: 10px;
+          background: linear-gradient(135deg, #d4845c 0%, #c9703a 100%);
+          color: white;
+          border-radius: 6px;
+          font-size: 0.95em;
+        }
+
+        .btn-small:hover {
+          transform: translateY(-2px);
+        }
+
+        .error-message {
+          background: #ffebee;
+          color: #c62828;
+          padding: 15px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          border-left: 4px solid #c62828;
+        }
+
+        .loading, .no-rooms {
+          text-align: center;
+          color: #8d6e63;
+          font-size: 1.1em;
+          padding: 40px;
         }
 
         /* Modal Styles */
@@ -407,9 +416,9 @@ export const LandingPage = ({
 
         .modal {
           background: white;
+          border-radius: 12px;
           padding: 30px;
-          border-radius: 8px;
-          max-width: 400px;
+          max-width: 500px;
           width: 90%;
           box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
         }
@@ -423,15 +432,25 @@ export const LandingPage = ({
 
         .modal-header h2 {
           margin: 0;
-          color: #333;
+          color: #5c4033;
         }
 
         .close-btn {
           background: none;
           border: none;
-          font-size: 1.5rem;
+          font-size: 2em;
+          color: #999;
           cursor: pointer;
-          color: #666;
+          padding: 0;
+          width: 30px;
+          height: 30px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .close-btn:hover {
+          color: #333;
         }
 
         .form-group {
@@ -441,36 +460,54 @@ export const LandingPage = ({
         .form-group label {
           display: block;
           margin-bottom: 8px;
-          color: #333;
+          color: #5c4033;
           font-weight: 600;
         }
 
         .form-group input {
           width: 100%;
-          padding: 10px;
-          border: 2px solid #e0e0e0;
-          border-radius: 5px;
-          font-size: 1rem;
+          padding: 12px;
+          border: 2px solid #e0d5ce;
+          border-radius: 6px;
+          font-size: 1em;
           box-sizing: border-box;
+          transition: border-color 0.3s;
         }
 
         .form-group input:focus {
           outline: none;
-          border-color: #667eea;
+          border-color: #d4845c;
         }
 
         .form-group.checkbox {
           display: flex;
           align-items: center;
+          gap: 10px;
         }
 
         .form-group.checkbox input {
           width: auto;
-          margin-right: 10px;
+          margin: 0;
         }
 
         .form-group.checkbox label {
           margin: 0;
+        }
+
+        @media (max-width: 768px) {
+          .landing-header {
+            flex-direction: column;
+            gap: 10px;
+            text-align: center;
+          }
+
+          .action-buttons {
+            flex-direction: column;
+          }
+
+          .rooms-grid {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
     </div>
