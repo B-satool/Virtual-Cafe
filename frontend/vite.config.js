@@ -19,6 +19,19 @@ export default defineConfig({
         target: "http://localhost:3001",
         changeOrigin: true,
       },
+      // Backend serves this file from its `public/` directory
+      "/freesound_community-cafe-noise-32940.mp3": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/rain.mp3": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/fireplace.mp3": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
     },
   },
   build: {

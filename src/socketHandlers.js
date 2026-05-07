@@ -4,6 +4,27 @@ const roomTimers = new Map();
 const roomHosts = new Map();
 const roomTimerConfigs = new Map(); // Store custom durations per room
 
+async function cleanupEmptyRoom({ io, roomCode, room }) {
+  // If the last member left a public room, ARCHIVE it (soft delete) so it
+  // won't show in public lists, but session_logs won't be removed by the
+  // `session_logs.room_id -> rooms.id ON DELETE CASCADE` constraint.
+  if (!room?.is_public) return;
+
+  const remaining = (await db.getParticipants(room.id)).result || [];
+  if (remaining.length > 0) return;
+
+  try {
+    await db.archiveRoom(room.id);
+  } catch (e) {
+    console.error("[ROOM_ARCHIVE_ERROR]", e);
+  } finally {
+    roomHosts.delete(roomCode);
+    stopRoomTimer(roomCode);
+    roomTimers.delete(roomCode);
+    roomTimerConfigs.delete(roomCode);
+  }
+}
+
 function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
     console.log(`[SOCKET] User connected: ${socket.id}`);
@@ -20,13 +41,46 @@ function setupSocketHandlers(io) {
         }
         const room = roomResult.result;
 
-        // Check if user should be host
-        const isHost = String(room.created_by).toLowerCase() === String(userId).toLowerCase();
+        // Determine current host (from memory or DB) before inserting/updating participant.
+        let currentHostId = roomHosts.get(roomCode);
+        if (!currentHostId) {
+          const existingParticipants = (await db.getParticipants(room.id)).result || [];
+          const existingHost = existingParticipants.find((p) => p.is_host);
+          if (existingHost) currentHostId = existingHost.user_id;
+        }
+
+        // Check if user should be host (creator becomes host only if no host exists yet)
+        const isCreator =
+          String(room.created_by).toLowerCase() === String(userId).toLowerCase();
+        const isHost = !currentHostId && isCreator;
         if (isHost) roomHosts.set(roomCode, userId);
 
-        await db.addParticipant(room.id, userId, username, isHost);
+        const participantResult = await db.addParticipant(room.id, userId, username, isHost);
+        if (!participantResult?.success) {
+          console.error("[ADD_PARTICIPANT_ERROR]", participantResult?.error);
+          socket.emit("error", { message: participantResult?.error || "Failed to join room" });
+          return;
+        }
+
+        const sessionStartResult = await db.logSessionStart(userId, room.id);
+        if (!sessionStartResult?.success) {
+          // Don't block joining the room, but log it so we can fix DB/RLS issues.
+          console.error("[SESSION_START_LOG_ERROR]", sessionStartResult?.error);
+        }
+
         const participantsResult = await db.getParticipants(room.id);
         const participants = participantsResult.result || [];
+
+        // If we still don't have a host (e.g. creator isn't present), pick the earliest participant.
+        if (!roomHosts.get(roomCode)) {
+          const host = participants.find((p) => p.is_host) || participants[0];
+          if (host) {
+            roomHosts.set(roomCode, host.user_id);
+            if (!host.is_host) {
+              await db.setHostStatus(room.id, host.user_id, true);
+            }
+          }
+        }
 
         socket.join(roomCode);
         socket.roomCode = roomCode;
@@ -66,6 +120,50 @@ function setupSocketHandlers(io) {
       } catch (error) {
         console.error("[ROOM_JOIN_ERROR]", error);
         socket.emit("error", { message: "Failed to join room" });
+      }
+    });
+
+    socket.on("room:leave", async (data) => {
+      const roomCode = data?.roomCode || socket.roomCode;
+      const userId = data?.userId || socket.userId;
+      if (!roomCode || !userId) return;
+
+      try {
+        const roomResult = await db.getRoomByCode(roomCode);
+        if (!roomResult.success) return;
+        const room = roomResult.result;
+
+        const removeResult = await db.removeParticipant(room.id, userId);
+        if (!removeResult?.success) console.error("[REMOVE_PARTICIPANT_ERROR]", removeResult?.error);
+
+        const sessionEndResult = await db.logSessionEnd(userId, room.id);
+        if (!sessionEndResult?.success) console.error("[SESSION_END_LOG_ERROR]", sessionEndResult?.error);
+
+        // Host transfer if host left
+        const hostId = roomHosts.get(roomCode);
+        if (hostId && String(hostId).toLowerCase() === String(userId).toLowerCase()) {
+          const participants = (await db.getParticipants(room.id)).result || [];
+          const newHost = participants.find((p) => p.user_id !== userId) || null;
+          if (newHost) {
+            await db.setHostStatus(room.id, newHost.user_id, true);
+            roomHosts.set(roomCode, newHost.user_id);
+          } else {
+            roomHosts.delete(roomCode);
+            stopRoomTimer(roomCode);
+            roomTimers.delete(roomCode);
+            roomTimerConfigs.delete(roomCode);
+          }
+        }
+
+        const updatedParticipants = (await db.getParticipants(room.id)).result || [];
+        io.to(roomCode).emit("room:state", { participants: updatedParticipants });
+
+        // If a public room becomes empty, delete it.
+        await cleanupEmptyRoom({ io, roomCode, room });
+
+        socket.leave(roomCode);
+      } catch (e) {
+        console.error("[ROOM_LEAVE_ERROR]", e);
       }
     });
 
@@ -168,12 +266,27 @@ function setupSocketHandlers(io) {
     });
 
     socket.on("chat:message", async (data) => {
-      const { roomCode, userId, username, message } = data;
+      const roomCode = socket.roomCode;
+      const userId = socket.userId;
+      const username = socket.username;
+      const message = typeof data?.message === "string" ? data.message.trim() : "";
+      if (!roomCode || !userId || !message) return;
       try {
         const roomResult = await db.getRoomByCode(roomCode);
-        const msgResult = await db.addChatMessage(roomResult.result.id, userId, username, message);
+        const msgResult = await db.addChatMessage(
+          roomResult.result.id,
+          userId,
+          username,
+          message,
+        );
+        if (!msgResult?.success) {
+          socket.emit("error", { message: msgResult?.error || "Failed to send message" });
+          return;
+        }
         io.to(roomCode).emit("chat:message", msgResult.result);
-      } catch (e) { socket.emit("error", { message: "Failed to send message" }); }
+      } catch (e) {
+        socket.emit("error", { message: e?.message || "Failed to send message" });
+      }
     });
 
     socket.on("host:transfer", async (data) => {
@@ -204,6 +317,48 @@ function setupSocketHandlers(io) {
 
     socket.on("disconnect", () => {
       console.log(`[SOCKET] User disconnected: ${socket.id}`);
+      // Treat disconnect as a leave (best-effort).
+      const roomCode = socket.roomCode;
+      const userId = socket.userId;
+      if (!roomCode || !userId) return;
+
+      (async () => {
+        try {
+          const roomResult = await db.getRoomByCode(roomCode);
+          if (!roomResult.success) return;
+          const room = roomResult.result;
+
+          const removeResult = await db.removeParticipant(room.id, userId);
+          if (!removeResult?.success) console.error("[REMOVE_PARTICIPANT_ERROR]", removeResult?.error);
+
+          const sessionEndResult = await db.logSessionEnd(userId, room.id);
+          if (!sessionEndResult?.success) console.error("[SESSION_END_LOG_ERROR]", sessionEndResult?.error);
+
+          // Host transfer if host left
+          const hostId = roomHosts.get(roomCode);
+          if (hostId && String(hostId).toLowerCase() === String(userId).toLowerCase()) {
+            const participants = (await db.getParticipants(room.id)).result || [];
+            const newHost = participants.find((p) => p.user_id !== userId) || null;
+            if (newHost) {
+              await db.setHostStatus(room.id, newHost.user_id, true);
+              roomHosts.set(roomCode, newHost.user_id);
+            } else {
+              roomHosts.delete(roomCode);
+              stopRoomTimer(roomCode);
+              roomTimers.delete(roomCode);
+              roomTimerConfigs.delete(roomCode);
+            }
+          }
+
+          const updatedParticipants = (await db.getParticipants(room.id)).result || [];
+          io.to(roomCode).emit("room:state", { participants: updatedParticipants });
+
+          // If a public room becomes empty, delete it.
+          await cleanupEmptyRoom({ io, roomCode, room });
+        } catch (e) {
+          console.error("[DISCONNECT_CLEANUP_ERROR]", e);
+        }
+      })();
     });
   });
 }

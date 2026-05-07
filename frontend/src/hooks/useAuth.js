@@ -77,21 +77,37 @@ export const useAuth = () => {
 
       if (!res.ok) throw new Error(data.error || "Signup failed");
 
-      localStorage.setItem("userToken", data.accessToken);
-      localStorage.setItem("userId", data.userId);
-      localStorage.setItem("username", username);
-      localStorage.setItem("userRole", 'user'); // Default for signup
+      // Some Supabase projects require email confirmation; in that case
+      // `accessToken` may be null even though the auth user was created.
+      // To avoid a "fake login" state, we only set auth if we have a token,
+      // otherwise we attempt an immediate login (works when confirmation is not required).
+      if (data.accessToken) {
+        localStorage.setItem("userToken", data.accessToken);
+        localStorage.setItem("userId", data.userId);
+        localStorage.setItem("username", username);
+        localStorage.setItem("userRole", "user"); // Default for signup
 
-      setUser({ id: data.userId, username, role: 'user' });
-      setIsAuthenticated(true);
-      return true;
+        setUser({ id: data.userId, username, role: "user" });
+        setIsAuthenticated(true);
+        return true;
+      }
+
+      const loggedIn = await login(email, password);
+      if (!loggedIn) {
+        setError(
+          data.emailConfirmationRequired
+            ? "Account created. Please confirm your email, then log in."
+            : "Account created. Please log in.",
+        );
+      }
+      return loggedIn;
     } catch (err) {
       setError(err.message);
       return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [login]);
 
   const logout = useCallback(() => {
     localStorage.removeItem("userToken");

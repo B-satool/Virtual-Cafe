@@ -3,7 +3,10 @@ require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
 
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+// Prefer service role key on the server to bypass RLS for server-managed tables.
+// Falls back to SUPABASE_KEY (typically anon) for local/dev setups.
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ============================================
@@ -12,6 +15,31 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function signUp(email, password, username, fullName) {
   try {
+    const normalizedUsername = (username || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ".");
+    const normalizedFullName = (fullName || "").trim();
+
+    if (!email || !password || !normalizedUsername) {
+      return { success: false, error: "Missing required fields" };
+    }
+
+    // Pre-check username uniqueness to avoid creating an auth user
+    // and then failing profile creation (leaving an orphan auth user).
+    const { data: existingUser, error: existingError } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("username", normalizedUsername)
+      .limit(1);
+
+    if (existingError) {
+      return { success: false, error: existingError.message };
+    }
+    if (existingUser && existingUser.length > 0) {
+      return { success: false, error: "Username already taken" };
+    }
+
     // Create user with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
@@ -19,7 +47,7 @@ async function signUp(email, password, username, fullName) {
       options: {
         emailRedirectTo: `${process.env.APP_URL || "http://localhost:3001"}/auth/callback`,
         data: {
-          display_name: fullName,
+          display_name: normalizedFullName,
         },
       },
     });
@@ -33,21 +61,22 @@ async function signUp(email, password, username, fullName) {
     // Create user profile in database
     const { data: profileData, error: profileError } = await supabase
       .from("user_profiles")
-      .insert(
+      .upsert(
         [
           {
             id: userId,
             email,
-            username,
-            display_name: fullName || username,
-            full_name: fullName,
+            username: normalizedUsername,
+            display_name: normalizedFullName || normalizedUsername,
+            full_name: normalizedFullName,
             avatar_url: null,
             profile_picture_url: null,
-            role: 'user',
           },
         ],
         { onConflict: "id" },
-      );
+      )
+      .select()
+      .single();
 
     if (profileError) {
       console.error("Profile creation error:", profileError.message);
@@ -69,6 +98,7 @@ async function signUp(email, password, username, fullName) {
       refreshToken: session?.refresh_token,
       user: authData.user,
       emailConfirmationRequired: authData.user?.email_confirmed_at === null,
+      profile: profileData || null,
     };
   } catch (error) {
     return { success: false, error: error.message };
@@ -332,6 +362,7 @@ async function getRoomByCode(roomCode) {
       .from("rooms")
       .select("*")
       .eq("room_code", roomCode)
+      .is("archived_at", null)
       .single();
 
     if (error) {
@@ -350,6 +381,7 @@ async function getRoomById(roomId) {
       .from("rooms")
       .select("*")
       .eq("id", roomId)
+      .is("archived_at", null)
       .single();
 
     if (error) {
@@ -376,6 +408,25 @@ async function deleteRoom(roomId) {
   }
 }
 
+async function archiveRoom(roomId) {
+  try {
+    const { data, error } = await supabase
+      .from("rooms")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", roomId)
+      .select()
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, result: data };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
 async function getPublicRooms() {
   try {
     // Query rooms and count participants in one go
@@ -383,6 +434,7 @@ async function getPublicRooms() {
       .from("rooms")
       .select("*, participants:participants(count)")
       .eq("is_public", true)
+      .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(20);
 
@@ -445,14 +497,19 @@ async function addParticipant(roomId, userId, username, isHost = false) {
   try {
     const { data, error } = await supabase
       .from("participants")
-      .insert([
-        {
-          room_id: roomId,
-          user_id: userId,
-          username: username,
-          is_host: isHost,
-        },
-      ])
+      // Idempotent join: if a participant row already exists (e.g. refresh / stale disconnect),
+      // update it instead of failing the whole join flow.
+      .upsert(
+        [
+          {
+            room_id: roomId,
+            user_id: userId,
+            username: username,
+            is_host: isHost,
+          },
+        ],
+        { onConflict: "room_id,user_id" },
+      )
       .select();
 
     if (error) {
@@ -951,6 +1008,7 @@ module.exports = {
   getRoomByCode,
   getRoomById,
   deleteRoom,
+  archiveRoom,
   getPublicRooms,
   checkRoomExists,
   // Participants

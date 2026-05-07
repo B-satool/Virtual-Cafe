@@ -15,6 +15,8 @@ export const RoomPage = ({
   const [timerDisplay, setTimerDisplay] = useState("25:00");
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState("");
   const [ambientSounds, setAmbientSounds] = useState({
     rain: { enabled: false, volume: 50 },
     cafe: { enabled: false, volume: 50 },
@@ -33,6 +35,9 @@ export const RoomPage = ({
   const chatEndRef = useRef(null);
   const audioContextRef = useRef(null);
   const activeNodesRef = useRef({});
+  const cafeAudioRef = useRef(null);
+  const rainAudioRef = useRef(null);
+  const fireplaceAudioRef = useRef(null);
 
   // Sync settings modal with room state when it opens
   useEffect(() => {
@@ -70,6 +75,7 @@ export const RoomPage = ({
     return audioContextRef.current;
   };
 
+  // Synth fallback (not used anymore for rain; kept for reference)
   const startRain = (ctx, gainNode) => {
     const bufferSize = 2 * ctx.sampleRate;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
@@ -95,6 +101,7 @@ export const RoomPage = ({
     source.start(0); return source;
   };
 
+  // Synth fallback (not used anymore for fireplace; kept for reference)
   const startFireplace = (ctx, gainNode) => {
     const bufferSize = 3 * ctx.sampleRate;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
@@ -152,17 +159,74 @@ export const RoomPage = ({
       const { enabled, volume } = ambientSounds[key];
       let nodeGroup = activeNodesRef.current[key];
       if (enabled) {
+        if (key === "rain") {
+          if (!rainAudioRef.current) {
+            const audio = new Audio("/rain.mp3");
+            audio.loop = true;
+            audio.preload = "auto";
+            rainAudioRef.current = audio;
+          }
+          rainAudioRef.current.volume = volume / 100;
+          rainAudioRef.current.play().catch(() => {});
+          return;
+        }
+
+        if (key === "cafe") {
+          if (!cafeAudioRef.current) {
+            const audio = new Audio("/freesound_community-cafe-noise-32940.mp3");
+            audio.loop = true;
+            audio.preload = "auto";
+            cafeAudioRef.current = audio;
+          }
+          cafeAudioRef.current.volume = volume / 100;
+          cafeAudioRef.current
+            .play()
+            .catch(() => {
+              // Autoplay can fail until a user gesture; toggle again after interaction.
+            });
+          return;
+        }
+
+        if (key === "fireplace") {
+          if (!fireplaceAudioRef.current) {
+            const audio = new Audio("/fireplace.mp3");
+            audio.loop = true;
+            audio.preload = "auto";
+            fireplaceAudioRef.current = audio;
+          }
+          fireplaceAudioRef.current.volume = volume / 100;
+          fireplaceAudioRef.current.play().catch(() => {});
+          return;
+        }
+
         if (!nodeGroup) {
           const gainNode = ctx.createGain(); gainNode.gain.value = volume / 100;
           let source;
+          // synth fallbacks (unused by default now)
           if (key === 'rain') source = startRain(ctx, gainNode);
-          else if (key === 'cafe') source = startCafe(ctx, gainNode);
           else source = startFireplace(ctx, gainNode);
           activeNodesRef.current[key] = { source, gainNode };
-        } else nodeGroup.gainNode.gain.value = volume / 100;
+        } else {
+          nodeGroup.gainNode.gain.value = volume / 100;
+        }
       } else if (nodeGroup) {
         nodeGroup.source.stop(); nodeGroup.gainNode.disconnect();
         delete activeNodesRef.current[key];
+      } else if (key === "cafe" && cafeAudioRef.current) {
+        try {
+          cafeAudioRef.current.pause();
+          cafeAudioRef.current.currentTime = 0;
+        } catch (e) {}
+      } else if (key === "rain" && rainAudioRef.current) {
+        try {
+          rainAudioRef.current.pause();
+          rainAudioRef.current.currentTime = 0;
+        } catch (e) {}
+      } else if (key === "fireplace" && fireplaceAudioRef.current) {
+        try {
+          fireplaceAudioRef.current.pause();
+          fireplaceAudioRef.current.currentTime = 0;
+        } catch (e) {}
       }
     });
   }, [ambientSounds]);
@@ -178,6 +242,30 @@ export const RoomPage = ({
       Object.values(activeNodesRef.current).forEach(group => {
         try { group.source.stop(); group.gainNode.disconnect(); } catch(e) {}
       });
+      if (cafeAudioRef.current) {
+        try {
+          cafeAudioRef.current.pause();
+          cafeAudioRef.current.src = "";
+          cafeAudioRef.current.load();
+        } catch (e) {}
+        cafeAudioRef.current = null;
+      }
+      if (rainAudioRef.current) {
+        try {
+          rainAudioRef.current.pause();
+          rainAudioRef.current.src = "";
+          rainAudioRef.current.load();
+        } catch (e) {}
+        rainAudioRef.current = null;
+      }
+      if (fireplaceAudioRef.current) {
+        try {
+          fireplaceAudioRef.current.pause();
+          fireplaceAudioRef.current.src = "";
+          fireplaceAudioRef.current.load();
+        } catch (e) {}
+        fireplaceAudioRef.current = null;
+      }
     };
   }, []);
 
@@ -196,10 +284,8 @@ export const RoomPage = ({
     // Optimistically update global UI
     updateRoomState({ chatMessages: [...(roomState.chatMessages || []), newMessage] });
     
-    emitEvent("chat:message", {
-      roomCode: currentRoom.room_code, userId: currentUser.id, username: currentUser.username,
-      message: chatInput, timestamp: newMessage.timestamp,
-    });
+    // Server uses socket identity (room/user) and only needs `message`
+    emitEvent("chat:message", { message: chatInput });
     setChatInput("");
   };
 
@@ -211,6 +297,23 @@ export const RoomPage = ({
 
   const toggleTask = (taskId, completed) => emitEvent("task:update", { taskId, updates: { completed: !completed } });
   const deleteTask = (taskId) => emitEvent("task:delete", { taskId });
+
+  const startEditTask = (task) => {
+    setEditingTaskId(task.id);
+    setEditingTaskTitle(task.title || "");
+  };
+
+  const cancelEditTask = () => {
+    setEditingTaskId(null);
+    setEditingTaskTitle("");
+  };
+
+  const commitEditTask = (taskId) => {
+    const title = editingTaskTitle.trim();
+    if (!title) return;
+    emitEvent("task:update", { taskId, updates: { title } });
+    cancelEditTask();
+  };
 
   const handleSaveTimerSettings = () => {
     emitEvent("timer:configure", {
@@ -280,7 +383,35 @@ export const RoomPage = ({
                   {tasks.length === 0 ? <div className="empty-state">No tasks.</div> : tasks.map(task => (
                     <div key={task.id} className={`task-item ${task.completed ? "completed" : ""}`}>
                       <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id, task.completed)} />
-                      <div className="task-text">{task.title}</div>
+                      {editingTaskId === task.id ? (
+                        <input
+                          className="task-edit-input"
+                          value={editingTaskTitle}
+                          autoFocus
+                          onChange={(e) => setEditingTaskTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEditTask(task.id);
+                            if (e.key === "Escape") cancelEditTask();
+                          }}
+                          onBlur={() => commitEditTask(task.id)}
+                        />
+                      ) : (
+                        <div
+                          className="task-text"
+                          title="Double-click to edit"
+                          onDoubleClick={() => startEditTask(task)}
+                        >
+                          {task.title}
+                        </div>
+                      )}
+                      <button
+                        className="btn-small btn-secondary"
+                        onClick={() => (editingTaskId === task.id ? cancelEditTask() : startEditTask(task))}
+                        title={editingTaskId === task.id ? "Cancel edit" : "Edit task"}
+                        type="button"
+                      >
+                        ✎
+                      </button>
                       <button className="btn-small btn-danger" onClick={() => deleteTask(task.id)}>✕</button>
                     </div>
                   ))}
@@ -357,7 +488,18 @@ export const RoomPage = ({
       {showLeaveConfirm && (
         <div className="modal-overlay"><div className="modal">
           <h2>Leave Room?</h2><p>Sure you want to leave?</p>
-          <div className="modal-buttons"><button className="btn-danger" onClick={leaveRoom}>Yes, Leave</button><button className="btn-secondary" onClick={() => setShowLeaveConfirm(false)}>Cancel</button></div>
+          <div className="modal-buttons">
+            <button
+              className="btn-danger"
+              onClick={() => {
+                emitEvent("room:leave", { roomCode: currentRoom.room_code, userId: currentUser?.id });
+                leaveRoom();
+              }}
+            >
+              Yes, Leave
+            </button>
+            <button className="btn-secondary" onClick={() => setShowLeaveConfirm(false)}>Cancel</button>
+          </div>
         </div></div>
       )}
 
@@ -374,6 +516,7 @@ export const RoomPage = ({
         .room-page { padding: 20px; min-height: 100vh; background: #f5e6d3; font-family: 'Segoe UI', sans-serif; color: #3d3d3d; }
         .room-header { background: white; border-radius: 15px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid #d4845c; }
         .room-header-left { display: flex; gap: 40px; align-items: center; }
+        .room-info-badges { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
         .info-box { background: #f9f5f0; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #e8d4c8; }
         .info-label { font-size: 0.8em; color: #8d6e63; text-transform: uppercase; }
         .info-value { font-size: 1.2em; font-weight: bold; color: #5c4033; }
@@ -392,6 +535,7 @@ export const RoomPage = ({
         .task-list { height: 400px; overflow-y: auto; }
         .task-item { background: #f9f5f0; padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; align-items: center; gap: 15px; }
         .task-item.completed { opacity: 0.6; } .task-text { flex: 1; color: #5c4033; } .completed .task-text { text-decoration: line-through; }
+        .task-edit-input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 2px solid #e8d4c8; background: #fff; }
         .chat-container { height: 400px; display: flex; flex-direction: column; }
         .chat-messages { flex: 1; overflow-y: auto; margin-bottom: 10px; }
         .chat-input-form { display: flex; gap: 10px; }

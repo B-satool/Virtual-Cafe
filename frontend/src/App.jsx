@@ -130,7 +130,11 @@ function App() {
             const messages = prev.chatMessages || [];
             // Check for optimistic duplicate
             const optimisticIndex = messages.findIndex(
-              (m) => m && m.isOptimistic && (m.userId === data.userId || m.user_id === data.user_id) && m.message === data.message
+              (m) =>
+                m &&
+                m.isOptimistic &&
+                String(m.userId ?? m.user_id) === String(data.user_id ?? data.userId) &&
+                m.message === data.message
             );
 
             if (optimisticIndex !== -1) {
