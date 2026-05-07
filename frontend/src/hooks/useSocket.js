@@ -47,6 +47,10 @@ export const useSocket = (userId, roomCode, username = "") => {
       sock.on("task:added", (data) => handlers.onTaskAdded && handlers.onTaskAdded(data));
       sock.on("task:updated", (data) => handlers.onTaskUpdated && handlers.onTaskUpdated(data));
       sock.on("task:deleted", (data) => handlers.onTaskDeleted && handlers.onTaskDeleted(data));
+
+      // Chat events
+      sock.on("chat:history", (data) => handlers.onChatHistory && handlers.onChatHistory(data));
+      sock.on("chat:message", (data) => handlers.onChatMessage && handlers.onChatMessage(data));
     },
     [roomCode, userId, username],
   );

@@ -31,7 +31,6 @@ async function signUp(email, password, username, fullName) {
     const userId = authData.user.id;
 
     // Create user profile in database
-    // Use .insert() instead of .upsert() to catch duplicates
     const { data: profileData, error: profileError } = await supabase
       .from("user_profiles")
       .insert(
@@ -40,7 +39,7 @@ async function signUp(email, password, username, fullName) {
             id: userId,
             email,
             username,
-            display_name: username,
+            display_name: fullName || username,
             full_name: fullName,
             avatar_url: null,
             profile_picture_url: null,
@@ -50,9 +49,11 @@ async function signUp(email, password, username, fullName) {
         { onConflict: "id" },
       );
 
-    if (profileError && !profileError.message.includes("duplicate")) {
-      // Log the error but don't return - user was created in auth
+    if (profileError) {
       console.error("Profile creation error:", profileError.message);
+      // If profile creation fails, we should probably return an error
+      // so the user knows their account wasn't fully set up
+      return { success: false, error: "Failed to create user profile: " + profileError.message };
     }
 
     // For development: if email confirmation is required, allow login anyway

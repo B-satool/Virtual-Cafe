@@ -14,6 +14,8 @@ export const AuthPage = ({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [localError, setLocalError] = useState("");
 
   const handleSubmit = async (e) => {
@@ -21,14 +23,19 @@ export const AuthPage = ({
     setLocalError("");
     clearError();
 
-    if (!email || !password || (!isLogin && !username)) {
+    if (!email || !password || (!isLogin && (!username || !fullName || !confirmPassword))) {
       setLocalError("Please fill in all fields");
+      return;
+    }
+
+    if (!isLogin && password !== confirmPassword) {
+      setLocalError("Passwords do not match");
       return;
     }
 
     const success = isLogin
       ? await login(email, password)
-      : await signup(email, password, username);
+      : await signup(email, password, username, fullName);
 
     if (!success) {
       setLocalError(error || "Authentication failed");
@@ -54,7 +61,7 @@ export const AuthPage = ({
               ← Back
             </button>
           )}
-          <h1>☕ Virtual Café</h1>
+          <h1>GrindSpace</h1>
           <h2>{isLogin ? "Welcome Back" : "Join Us"}</h2>
 
           {(error || localError) && (
@@ -62,6 +69,20 @@ export const AuthPage = ({
           )}
 
           <form onSubmit={handleSubmit}>
+            {!isLogin && (
+              <div className="form-group">
+                <label htmlFor="fullName">Full Name</label>
+                <input
+                  id="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your full name"
+                  required
+                />
+              </div>
+            )}
+
             <div className="form-group">
               <label htmlFor="email">{isLogin ? "Email or Username" : "Email"}</label>
               <input
@@ -99,6 +120,20 @@ export const AuthPage = ({
                 required
               />
             </div>
+
+            {!isLogin && (
+              <div className="form-group">
+                <label htmlFor="confirmPassword">Confirm Password</label>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            )}
 
             <button
               type="submit"

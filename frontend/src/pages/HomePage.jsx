@@ -25,6 +25,7 @@ export const HomePage = () => {
         loading={auth.loading}
         error={auth.error}
         clearError={auth.clearError}
+        initialAuthPage={auth.authPage}
       />
     );
   }

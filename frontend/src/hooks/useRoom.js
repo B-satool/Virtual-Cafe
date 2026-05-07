@@ -11,6 +11,7 @@ export const useRoom = (userId) => {
     timerState: "STUDY",
     timerSeconds: 1500,
     tasks: [],
+    chatMessages: [],
     ambientSound: "none",
   });
   const [loading, setLoading] = useState(false);
@@ -145,6 +146,13 @@ export const useRoom = (userId) => {
     setParticipants(newParticipants);
   }, []);
 
+  const addLocalChatMessage = useCallback((message) => {
+    setRoomState((prev) => ({
+      ...prev,
+      chatMessages: [...(prev.chatMessages || []), message]
+    }));
+  }, []);
+
   return {
     currentRoom,
     rooms,
@@ -159,6 +167,7 @@ export const useRoom = (userId) => {
     updateRoomState,
     updateCurrentRoom,
     updateParticipants,
+    addLocalChatMessage,
     setRoomState,
   };
 };

@@ -10,6 +10,7 @@ export const LandingPage = ({
   loading,
   error,
   logout,
+  onShowDashboard,
 }) => {
   const [roomName, setRoomName] = useState("");
   const [isPublic, setIsPublic] = useState(true);
@@ -117,7 +118,7 @@ export const LandingPage = ({
               🔑 Admin
             </button>
           )}
-          <button className="btn-primary" onClick={handleShowProfile}>
+          <button className="btn-primary" onClick={onShowDashboard}>
             👤 Dashboard
           </button>
           <button className="btn-secondary" onClick={logout}>

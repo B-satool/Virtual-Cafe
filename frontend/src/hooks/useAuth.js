@@ -4,6 +4,8 @@ export const useAuth = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return !!localStorage.getItem("userToken");
   });
+
+  const [user, setUser] = useState(() => {
     const stored = localStorage.getItem("userId");
     const username = localStorage.getItem("username");
     const role = localStorage.getItem("userRole");
@@ -54,14 +56,14 @@ export const useAuth = () => {
     }
   }, []);
 
-  const signup = useCallback(async (email, password, username) => {
+  const signup = useCallback(async (email, password, username, fullName) => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, username }),
+        body: JSON.stringify({ email, password, username, fullName }),
       });
       
       let data;

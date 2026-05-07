@@ -11,7 +11,6 @@ export const RoomPage = ({
   emitEvent,
 }) => {
   const [activeTab, setActiveTab] = useState("tasks");
-  const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [timerDisplay, setTimerDisplay] = useState("25:00");
   const [tasks, setTasks] = useState([]);
@@ -119,11 +118,9 @@ export const RoomPage = ({
     osc.start(); osc.stop(ctx.currentTime + 1);
   };
 
-  // Socket Listeners
+  // Socket Listeners (for non-chat events)
   useEffect(() => {
     if (!socket) return;
-    const handleChatHistory = (data) => setChatMessages(data.messages || []);
-    const handleChatMessage = (data) => setChatMessages((prev) => [...prev, data]);
     const handleTaskAdded = (task) => setTasks(prev => [...prev, task]);
     const handleTaskUpdated = (task) => setTasks(prev => prev.map(t => t.id === task.id ? task : t));
     const handleTaskDeleted = (data) => setTasks(prev => prev.filter(t => t.id !== data.taskId));
@@ -131,8 +128,6 @@ export const RoomPage = ({
     const handleTimerTransition = () => playBell();
     const handleError = (data) => showNotification(data.message, "error");
 
-    socket.on("chat:history", handleChatHistory);
-    socket.on("chat:message", handleChatMessage);
     socket.on("task:added", handleTaskAdded);
     socket.on("task:updated", handleTaskUpdated);
     socket.on("task:deleted", handleTaskDeleted);
@@ -141,8 +136,6 @@ export const RoomPage = ({
     socket.on("error", handleError);
 
     return () => {
-      socket.off("chat:history", handleChatHistory);
-      socket.off("chat:message", handleChatMessage);
       socket.off("task:added", handleTaskAdded);
       socket.off("task:updated", handleTaskUpdated);
       socket.off("task:deleted", handleTaskDeleted);
@@ -174,6 +167,11 @@ export const RoomPage = ({
     });
   }, [ambientSounds]);
 
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [roomState.chatMessages]);
+
   // Clean up
   useEffect(() => {
     return () => {
@@ -185,10 +183,22 @@ export const RoomPage = ({
 
   // Handlers
   const handleSendMessage = (e) => {
-    e.preventDefault(); if (!chatInput.trim()) return;
+    e.preventDefault(); if (!chatInput.trim() || !currentUser) return;
+    
+    const newMessage = {
+      userId: currentUser.id,
+      username: currentUser.username,
+      message: chatInput,
+      timestamp: new Date().toISOString(),
+      isOptimistic: true // Flag to identify local messages
+    };
+
+    // Optimistically update global UI
+    updateRoomState({ chatMessages: [...(roomState.chatMessages || []), newMessage] });
+    
     emitEvent("chat:message", {
       roomCode: currentRoom.room_code, userId: currentUser.id, username: currentUser.username,
-      message: chatInput, timestamp: new Date().toISOString(),
+      message: chatInput, timestamp: newMessage.timestamp,
     });
     setChatInput("");
   };
@@ -212,7 +222,7 @@ export const RoomPage = ({
 
   const updateSound = (key, updates) => setAmbientSounds(prev => ({ ...prev, [key]: { ...prev[key], ...updates } }));
 
-  const isHost = participants.find(p => p.user_id === currentUser.id)?.is_host;
+  const isHost = participants.find(p => p.user_id === currentUser?.id)?.is_host;
 
   return (
     <div className="room-page active">
@@ -279,12 +289,17 @@ export const RoomPage = ({
             ) : (
               <div className="chat-container">
                 <div className="chat-messages">
-                  {chatMessages.length === 0 ? <div className="empty-state">No messages.</div> : chatMessages.map((msg, i) => (
-                    <div key={i} className={`chat-message ${msg.userId === currentUser.id ? "own-message" : ""}`}>
-                      <div className="chat-user">{msg.username}</div>
-                      <div className="chat-text">{msg.message}</div>
-                    </div>
-                  ))}
+                  {(roomState.chatMessages || []).length === 0 ? <div className="empty-state">No messages.</div> : (roomState.chatMessages || []).map((msg, i) => {
+                    if (!msg) return null;
+                    const msgUserId = msg.userId || msg.user_id;
+                    const isOwnMessage = msgUserId === currentUser?.id;
+                    return (
+                      <div key={i} className={`chat-message ${isOwnMessage ? "own-message" : ""}`}>
+                        <div className="chat-user">{msg.username}</div>
+                        <div className="chat-text">{msg.message}</div>
+                      </div>
+                    );
+                  })}
                   <div ref={chatEndRef} />
                 </div>
                 <form className="chat-input-form" onSubmit={handleSendMessage}>
@@ -302,12 +317,12 @@ export const RoomPage = ({
             <div className="participant-list">
               {participants.map(p => (
                 <div key={p.user_id} className="participant">
-                  <div className="participant-avatar">{p.username.charAt(0).toUpperCase()}</div>
+                  <div className="participant-avatar">{(p.username || "U").charAt(0).toUpperCase()}</div>
                   <div className="participant-info">
                     <div className="participant-name">{p.username} {p.is_host ? "⭐" : ""}</div>
                     <div className="participant-status">{p.is_host ? "👑 Host" : "Member"}</div>
                   </div>
-                  {isHost && p.user_id !== currentUser.id && (
+                  {isHost && p.user_id !== currentUser?.id && (
                     <button className="btn-remove-participant" onClick={() => emitEvent("participant:remove", { userId: p.user_id })}>✕</button>
                   )}
                 </div>
@@ -349,7 +364,7 @@ export const RoomPage = ({
       {showTransferModal && (
         <div className="modal-overlay"><div className="modal">
           <h2>👑 Transfer Host</h2><p>Select new host:</p>
-          <div className="transfer-list">{participants.filter(p => p.user_id !== currentUser.id).map(p => (<label key={p.user_id} className="transfer-option"><input type="radio" name="newHost" onChange={() => setSelectedTransferUser(p.user_id)} /> {p.username}</label>))}</div>
+          <div className="transfer-list">{participants.filter(p => p.user_id !== currentUser?.id).map(p => (<label key={p.user_id} className="transfer-option"><input type="radio" name="newHost" onChange={() => setSelectedTransferUser(p.user_id)} /> {p.username}</label>))}</div>
           <div className="modal-buttons"><button className="btn-primary" disabled={!selectedTransferUser} onClick={() => { emitEvent("host:transfer", { newHostId: selectedTransferUser }); setShowTransferModal(false); }}>Transfer</button><button className="btn-secondary" onClick={() => setShowTransferModal(false)}>Cancel</button></div>
         </div></div>
       )}

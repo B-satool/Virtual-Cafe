@@ -7,12 +7,14 @@ import HomePage from "./pages/HomePage";
 import AuthPage from "./pages/AuthPage";
 import LandingPage from "./pages/LandingPage";
 import RoomPage from "./pages/RoomPage";
+import DashboardPage from "./pages/DashboardPage";
 import "./App.css";
 
 function AppContent() {
   const auth = React.useContext(AuthContext);
   const room = React.useContext(RoomContext);
   const socket = React.useContext(SocketContext);
+  const [view, setView] = React.useState("main"); // "main" or "dashboard"
 
   const renderPage = () => {
     if (!auth.isAuthenticated && !auth.user) return <HomePage />;
@@ -29,6 +31,7 @@ function AppContent() {
         />
       );
     }
+    
     if (room.currentRoom) {
       return (
         <RoomPage
@@ -43,6 +46,17 @@ function AppContent() {
         />
       );
     }
+
+    if (view === "dashboard") {
+      return (
+        <DashboardPage
+          currentUser={auth.user}
+          onBack={() => setView("main")}
+          logout={auth.logout}
+        />
+      );
+    }
+
     return (
       <LandingPage
         rooms={room.rooms}
@@ -53,6 +67,7 @@ function AppContent() {
         loading={room.loading}
         error={room.error}
         logout={auth.logout}
+        onShowDashboard={() => setView("dashboard")}
       />
     );
   };
@@ -104,6 +119,26 @@ function App() {
             totalTime: data.timer.totalTime,
             studyDuration: data.studyDuration,
             breakDuration: data.breakDuration,
+          });
+        },
+        onChatHistory: (data) => {
+          roomState.updateRoomState({ chatMessages: data.messages || [] });
+        },
+        onChatMessage: (data) => {
+          if (!data) return;
+          roomState.setRoomState((prev) => {
+            const messages = prev.chatMessages || [];
+            // Check for optimistic duplicate
+            const optimisticIndex = messages.findIndex(
+              (m) => m && m.isOptimistic && (m.userId === data.userId || m.user_id === data.user_id) && m.message === data.message
+            );
+
+            if (optimisticIndex !== -1) {
+              const newMessages = [...messages];
+              newMessages[optimisticIndex] = { ...data, isOptimistic: false };
+              return { ...prev, chatMessages: newMessages };
+            }
+            return { ...prev, chatMessages: [...messages, data] };
           });
         },
         onRoomClosed: () => roomState.leaveRoom(),
