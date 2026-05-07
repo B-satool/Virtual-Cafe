@@ -55,6 +55,11 @@ export const authAPI = {
   verifyToken: () => apiCall("/auth/verify", { method: "GET" }),
 };
 
+export const adminAPI = {
+  getAllUsers: () => apiCall("/admin/users", { method: "GET" }),
+  deleteUser: (userId) => apiCall(`/admin/users/${userId}`, { method: "DELETE" }),
+};
+
 // Room endpoints
 export const roomAPI = {
   createRoom: (name, isPrivate, capacity, createdBy) =>
@@ -130,19 +135,19 @@ export const taskAPI = {
 
 // User profile endpoints
 export const profileAPI = {
-  getProfile: (userId) => apiCall(`/profiles/${userId}`, { method: "GET" }),
+  getProfile: () => apiCall("/user-profile", { method: "GET" }),
 
-  updateProfile: (userId, updates) =>
-    apiCall(`/profiles/${userId}`, {
-      method: "PUT",
+  updateProfile: (updates) =>
+    apiCall("/update-profile", {
+      method: "POST",
       body: JSON.stringify(updates),
     }),
 
-  getUserSettings: (userId) =>
-    apiCall(`/users/${userId}/settings`, { method: "GET" }),
+  getUserSettings: () =>
+    apiCall("/user/sound-preferences", { method: "GET" }),
 
-  updateUserSettings: (userId, settings) =>
-    apiCall(`/users/${userId}/settings`, {
+  updateUserSettings: (settings) =>
+    apiCall("/user/sound-preferences", {
       method: "PUT",
       body: JSON.stringify(settings),
     }),
@@ -186,4 +191,5 @@ export default {
   profileAPI,
   timerAPI,
   joinRequestAPI,
+  adminAPI,
 };

@@ -8,8 +8,9 @@ export const AuthPage = ({
   clearError,
   setAuthPage,
   onBack,
+  initialAuthPage = "login",
 }) => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(initialAuthPage === "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -268,6 +269,15 @@ export const AuthPage = ({
 
         .toggle-btn:hover {
           text-decoration: underline;
+        }
+
+        @media (max-width: 480px) {
+          .auth-box {
+            padding: 30px 20px;
+          }
+          .auth-box h1 {
+            font-size: 1.5rem;
+          }
         }
       `}</style>
     </div>

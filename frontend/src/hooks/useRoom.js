@@ -21,12 +21,16 @@ export const useRoom = (userId) => {
       setLoading(true);
       setError(null);
       try {
+        const token = localStorage.getItem("userToken");
         const res = await fetch("/api/rooms/create", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
-            name: roomName,
-            isPrivate,
+            roomName,
+            isPublic: !isPrivate,
             capacity,
             created_by: userId,
           }),
@@ -57,9 +61,13 @@ export const useRoom = (userId) => {
       setLoading(true);
       setError(null);
       try {
+        const token = localStorage.getItem("userToken");
         const res = await fetch("/api/rooms/join", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
             room_code: roomCode,
             user_id: userId,
@@ -103,7 +111,12 @@ export const useRoom = (userId) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/rooms/public");
+      const token = localStorage.getItem("userToken");
+      const res = await fetch("/api/rooms/public", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load rooms");
       setRooms(data.rooms || []);

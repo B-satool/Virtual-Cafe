@@ -11,94 +11,50 @@ export const useSocket = (userId, roomCode, username = "") => {
     (sock, handlers) => {
       if (!sock) return;
 
-      // Connection events
       sock.on("connect", () => {
         setIsConnected(true);
         setSocketError(null);
         if (roomCode) {
-          console.log(
-            `[useSocket] Connected, emitting room:join with roomCode=${roomCode}, userId=${userId}, username=${username}`,
-          );
-          sock.emit("room:join", {
-            roomCode: roomCode,
-            userId: userId,
-            username: username,
-          });
+          sock.emit("room:join", { roomCode, userId, username });
         }
       });
 
-      sock.on("disconnect", () => {
-        setIsConnected(false);
-      });
-
-      sock.on("connect_error", (error) => {
-        setSocketError(error.message);
+      sock.on("disconnect", () => setIsConnected(false));
+      sock.on("connect_error", (error) => setSocketError(error.message));
+      sock.on("error", (data) => {
+        if (handlers.onError) handlers.onError(data);
       });
 
       // Room events
-      if (handlers.onParticipantJoined) {
-        sock.on("participant:joined", handlers.onParticipantJoined);
-      }
-      if (handlers.onParticipantLeft) {
-        sock.on("participant:left", handlers.onParticipantLeft);
-      }
-      if (handlers.onRoomClosed) {
-        sock.on("room:closed", handlers.onRoomClosed);
-      }
-      if (handlers.onParticipantsUpdate) {
-        sock.on("room:state", (data) => {
-          console.log("[useSocket] Received room:state event:", data);
-          handlers.onParticipantsUpdate(data);
-        });
-      }
+      if (handlers.onParticipantJoined) sock.on("participant:joined", handlers.onParticipantJoined);
+      if (handlers.onParticipantLeft) sock.on("participant:left", handlers.onParticipantLeft);
+      if (handlers.onRoomClosed) sock.on("room:closed", handlers.onRoomClosed);
+      
+      sock.on("room:state", (data) => {
+        if (handlers.onRoomState) handlers.onRoomState(data);
+      });
 
-      // Timer events
-      if (handlers.onTimerStart) {
-        sock.on("timer:started", handlers.onTimerStart);
-      }
-      if (handlers.onTimerTick) {
-        sock.on("timer:tick", handlers.onTimerTick);
-      }
-      if (handlers.onTimerPause) {
-        sock.on("timer:paused", handlers.onTimerPause);
-      }
-      if (handlers.onTimerResume) {
-        sock.on("timer:resumed", handlers.onTimerResume);
-      }
-      if (handlers.onTimerTransition) {
-        sock.on("timer:transitioned", handlers.onTimerTransition);
-      }
+      // Timer events - Map all to handlers
+      sock.on("timer:tick", (data) => handlers.onTimerUpdate && handlers.onTimerUpdate(data));
+      sock.on("timer:started", (data) => handlers.onTimerUpdate && handlers.onTimerUpdate(data));
+      sock.on("timer:paused", (data) => handlers.onTimerUpdate && handlers.onTimerUpdate(data));
+      sock.on("timer:resumed", (data) => handlers.onTimerUpdate && handlers.onTimerUpdate(data));
+      sock.on("timer:reset", (data) => handlers.onTimerUpdate && handlers.onTimerUpdate(data));
+      sock.on("timer:transitioned", (data) => handlers.onTimerUpdate && handlers.onTimerUpdate(data));
+      sock.on("timer:configured", (data) => handlers.onTimerConfigured && handlers.onTimerConfigured(data));
 
       // Task events
-      if (handlers.onTaskAdded) {
-        sock.on("task:added", handlers.onTaskAdded);
-      }
-      if (handlers.onTaskUpdated) {
-        sock.on("task:updated", handlers.onTaskUpdated);
-      }
-      if (handlers.onTaskDeleted) {
-        sock.on("task:deleted", handlers.onTaskDeleted);
-      }
-      if (handlers.onTasksSync) {
-        sock.on("tasks:sync", handlers.onTasksSync);
-      }
+      sock.on("task:added", (data) => handlers.onTaskAdded && handlers.onTaskAdded(data));
+      sock.on("task:updated", (data) => handlers.onTaskUpdated && handlers.onTaskUpdated(data));
+      sock.on("task:deleted", (data) => handlers.onTaskDeleted && handlers.onTaskDeleted(data));
     },
     [roomCode, userId, username],
   );
 
   const initializeSocket = useCallback(
     (handlers = {}) => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-
-      const newSocket = io(window.location.origin, {
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: 5,
-      });
-
+      if (socketRef.current) socketRef.current.disconnect();
+      const newSocket = io(window.location.origin);
       setupSocketListeners(newSocket, handlers);
       socketRef.current = newSocket;
       setSocket(newSocket);
@@ -108,7 +64,7 @@ export const useSocket = (userId, roomCode, username = "") => {
   );
 
   const emitEvent = useCallback((event, data) => {
-    if (socketRef.current && socketRef.current.connected) {
+    if (socketRef.current?.connected) {
       socketRef.current.emit(event, data);
     }
   }, []);
@@ -121,12 +77,6 @@ export const useSocket = (userId, roomCode, username = "") => {
       setIsConnected(false);
     }
   }, []);
-
-  useEffect(() => {
-    return () => {
-      disconnectSocket();
-    };
-  }, [disconnectSocket]);
 
   return {
     socket: socketRef.current,

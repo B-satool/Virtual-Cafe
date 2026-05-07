@@ -59,7 +59,7 @@ app.get("/auth/callback", (req, res) => {
                     localStorage.setItem('accessToken', '${access_token}');
                     localStorage.setItem('refreshToken', '${refresh_token}');
                 }
-                window.location.href = '/';
+                window.location.href = 'http://localhost:3000';
             </script>
         </html>
     `);
@@ -79,7 +79,14 @@ async function verifyToken(req, res, next) {
   if (!verifyResult.success) {
     return res.status(401).json({ error: "Invalid token" });
   }
-  req.user = verifyResult.user;
+  
+  // Enrich with profile data (to get role)
+  const profileResult = await db.getUserProfile(verifyResult.user.id);
+  if (profileResult.success && profileResult.result) {
+    req.user = { ...verifyResult.user, ...profileResult.result };
+  } else {
+    req.user = verifyResult.user;
+  }
   next();
 }
 
@@ -216,6 +223,26 @@ app.post("/api/update-profile", verifyToken, async (req, res) => {
   res.json(result);
 });
 
+// Admin routes
+app.get("/api/admin/users", verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Admin role required." });
+  }
+  const result = await db.getAllUsers();
+  if (!result.success) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+app.delete("/api/admin/users/:userId", verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Admin role required." });
+  }
+  const { userId } = req.params;
+  const result = await db.deleteUser(userId);
+  if (!result.success) return res.status(400).json({ error: result.error });
+  res.json({ success: true, message: "User deleted successfully" });
+});
+
 // Upload profile picture to Supabase Storage
 app.post("/api/upload-profile-picture", verifyToken, upload.single("file"), async (req, res) => {
   if (!req.file) {
@@ -227,7 +254,7 @@ app.post("/api/upload-profile-picture", verifyToken, upload.single("file"), asyn
 });
 
 // Initialize Sockets
-initSocketHandlers(io);
+initSocketHandlers.setupSocketHandlers(io);
 
 // Dynamic port selection
 function startServer(port) {
@@ -245,5 +272,18 @@ function startServer(port) {
       }
     });
 }
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error("[SERVER_ERROR]", err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({
+    success: false,
+    error: "Internal Server Error",
+    message: err.message,
+  });
+});
 
 startServer(PORT);

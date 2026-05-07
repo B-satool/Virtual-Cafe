@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 export const RoomPage = ({
   currentRoom,
@@ -10,1009 +10,404 @@ export const RoomPage = ({
   socket,
   emitEvent,
 }) => {
+  const [activeTab, setActiveTab] = useState("tasks");
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
   const [timerDisplay, setTimerDisplay] = useState("25:00");
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
-  const [ambientSound, setAmbientSound] = useState("none");
+  const [ambientSounds, setAmbientSounds] = useState({
+    rain: { enabled: false, volume: 50 },
+    cafe: { enabled: false, volume: 50 },
+    fireplace: { enabled: false, volume: 50 },
+  });
+  const [showTimerSettings, setShowTimerSettings] = useState(false);
+  const [timerConfig, setTimerConfig] = useState({
+    studyDuration: 25,
+    breakDuration: 5,
+  });
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedTransferUser, setSelectedTransferUser] = useState(null);
   const [notification, setNotification] = useState(null);
-  const [localParticipants, setLocalParticipants] = useState(
-    participants || [],
-  );
-  const audioRef = useRef(null);
+  
+  const chatEndRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const activeNodesRef = useRef({});
 
-  // Log all incoming props
-  console.log("[RoomPage] Received props:", {
-    participantCount: participants?.length,
-    participants: participants,
-    currentUserId: currentUser?.id,
-    currentUsername: currentUser?.username,
-    roomCode: currentRoom?.room_code,
-  });
+  // Sync settings modal with room state when it opens
+  useEffect(() => {
+    if (showTimerSettings) {
+      setTimerConfig({
+        studyDuration: Math.floor((roomState.studyDuration || 1500) / 60),
+        breakDuration: Math.floor((roomState.breakDuration || 300) / 60),
+      });
+    }
+  }, [showTimerSettings, roomState.studyDuration, roomState.breakDuration]);
 
-  // Show notification
-  const showNotification = (message, type = "info") => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  // Format seconds to MM:SS
+  // Formatting helpers
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Update timer display when roomState changes
+  const showNotification = (message, type = "info") => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  // Sync timer display
   useEffect(() => {
     setTimerDisplay(formatTime(roomState.timerSeconds || 1500));
   }, [roomState.timerSeconds]);
 
-  // Load tasks from localStorage or backend
-  useEffect(() => {
-    const loadTasks = async () => {
-      if (currentRoom?.id) {
-        try {
-          const res = await fetch(`/api/tasks/${currentRoom.id}`);
-          const data = await res.json();
-          if (res.ok) {
-            setTasks(data.tasks || []);
-          }
-        } catch (err) {
-          console.error("Failed to load tasks:", err);
-        }
-      }
-    };
-    loadTasks();
-  }, [currentRoom?.id]);
-
-  // Sync localParticipants whenever the participants prop changes
-  useEffect(() => {
-    if (participants && Array.isArray(participants)) {
-      console.log("[RoomPage] participants prop updated:", participants);
-      console.log("[RoomPage] currentUser:", currentUser);
-      setLocalParticipants(participants);
+  // Audio Synthesis Logic
+  const getAudioContext = () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
     }
-  }, [participants, currentUser]);
+    if (audioContextRef.current.state === 'suspended') audioContextRef.current.resume();
+    return audioContextRef.current;
+  };
 
-  // Listen for socket events (timer, tasks, room state, notifications)
+  const startRain = (ctx, gainNode) => {
+    const bufferSize = 2 * ctx.sampleRate;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const source = ctx.createBufferSource(); source.buffer = buffer; source.loop = true;
+    const filter = ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 800; filter.Q.value = 0.5;
+    source.connect(filter); filter.connect(gainNode); gainNode.connect(ctx.destination);
+    source.start(0); return source;
+  };
+
+  const startCafe = (ctx, gainNode) => {
+    const bufferSize = 4 * ctx.sampleRate;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0); let lastOut = 0;
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1;
+      data[i] = (lastOut + (0.02 * white)) / 1.02; lastOut = data[i]; data[i] *= 3.5;
+    }
+    const source = ctx.createBufferSource(); source.buffer = buffer; source.loop = true;
+    const filter = ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 500; filter.Q.value = 0.8;
+    source.connect(filter); filter.connect(gainNode); gainNode.connect(ctx.destination);
+    source.start(0); return source;
+  };
+
+  const startFireplace = (ctx, gainNode) => {
+    const bufferSize = 3 * ctx.sampleRate;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      const crackle = Math.random() > 0.997 ? (Math.random() * 2 - 1) * 0.8 : 0;
+      const rumble = (Math.random() * 2 - 1) * 0.05; data[i] = crackle + rumble;
+    }
+    const source = ctx.createBufferSource(); source.buffer = buffer; source.loop = true;
+    const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 1200;
+    source.connect(filter); filter.connect(gainNode); gainNode.connect(ctx.destination);
+    source.start(0); return source;
+  };
+
+  const playBell = () => {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.type = 'sine'; osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.5, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 1);
+  };
+
+  // Socket Listeners
   useEffect(() => {
     if (!socket) return;
+    const handleChatHistory = (data) => setChatMessages(data.messages || []);
+    const handleChatMessage = (data) => setChatMessages((prev) => [...prev, data]);
+    const handleTaskAdded = (task) => setTasks(prev => [...prev, task]);
+    const handleTaskUpdated = (task) => setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+    const handleTaskDeleted = (data) => setTasks(prev => prev.filter(t => t.id !== data.taskId));
+    const handleRoomState = (data) => { if (data.tasks) setTasks(data.tasks); };
+    const handleTimerTransition = () => playBell();
+    const handleError = (data) => showNotification(data.message, "error");
 
-    socket.on("timer:tick", (data) => {
-      updateRoomState({ timerSeconds: data.seconds });
-    });
-
-    socket.on("timer:started", () => {
-      setIsTimerRunning(true);
-    });
-
-    socket.on("timer:paused", () => {
-      setIsTimerRunning(false);
-    });
-
-    socket.on("timer:resumed", () => {
-      setIsTimerRunning(true);
-    });
-
-    socket.on("timer:transitioned", (data) => {
-      updateRoomState({
-        timerState: data.newState,
-        timerSeconds: data.seconds,
-      });
-      setIsTimerRunning(true);
-    });
-
-    socket.on("task:added", (data) => {
-      setTasks((prev) => [...prev, data.task]);
-    });
-
-    socket.on("task:updated", (data) => {
-      setTasks((prev) =>
-        prev.map((t) => (t.id === data.task.id ? data.task : t)),
-      );
-    });
-
-    socket.on("task:deleted", (data) => {
-      setTasks((prev) => prev.filter((t) => t.id !== data.taskId));
-    });
-
-    socket.on("room:closed", () => {
-      alert("The room has been closed by the host.");
-      leaveRoom();
-    });
-
-    socket.on("host:transferred", (data) => {
-      showNotification("Host role transferred successfully", "success");
-      setShowTransferModal(false);
-    });
-
-    socket.on("participant:removed", (data) => {
-      showNotification(
-        data.reason || "You were removed from the room",
-        "warning",
-      );
-      setTimeout(() => {
-        leaveRoom();
-      }, 2000);
-    });
-
-    socket.on("participant:removed_from_room", (data) => {
-      showNotification(`${data.userId} has been removed from the room`, "info");
-    });
-
-    socket.on("error", (data) => {
-      showNotification(data.message, "error");
-    });
+    socket.on("chat:history", handleChatHistory);
+    socket.on("chat:message", handleChatMessage);
+    socket.on("task:added", handleTaskAdded);
+    socket.on("task:updated", handleTaskUpdated);
+    socket.on("task:deleted", handleTaskDeleted);
+    socket.on("room:state", handleRoomState);
+    socket.on("timer:transitioned", handleTimerTransition);
+    socket.on("error", handleError);
 
     return () => {
-      socket.off("timer:tick");
-      socket.off("timer:started");
-      socket.off("timer:paused");
-      socket.off("timer:resumed");
-      socket.off("timer:transitioned");
-      socket.off("task:added");
-      socket.off("task:updated");
-      socket.off("task:deleted");
-      socket.off("room:closed");
-      socket.off("host:transferred");
-      socket.off("participant:removed");
-      socket.off("participant:removed_from_room");
-      socket.off("error");
+      socket.off("chat:history", handleChatHistory);
+      socket.off("chat:message", handleChatMessage);
+      socket.off("task:added", handleTaskAdded);
+      socket.off("task:updated", handleTaskUpdated);
+      socket.off("task:deleted", handleTaskDeleted);
+      socket.off("room:state", handleRoomState);
+      socket.off("timer:transitioned", handleTimerTransition);
+      socket.off("error", handleError);
     };
-  }, [socket, updateRoomState, leaveRoom]);
+  }, [socket]);
 
-  // Handle timer controls
-  const handleStartTimer = () => {
-    if (!isTimerRunning) {
-      emitEvent("timer:start", { room_code: currentRoom.room_code });
-      setIsTimerRunning(true);
-    }
-  };
-
-  const handlePauseTimer = () => {
-    if (isTimerRunning) {
-      emitEvent("timer:pause", { room_code: currentRoom.room_code });
-      setIsTimerRunning(false);
-    }
-  };
-
-  const handleResetTimer = () => {
-    emitEvent("timer:reset", { room_code: currentRoom.room_code });
-    setIsTimerRunning(false);
-  };
-
-  // Handle task management
-  const handleAddTask = (e) => {
-    e.preventDefault();
-    if (!newTask.trim()) return;
-
-    emitEvent("task:add", {
-      room_code: currentRoom.room_code,
-      description: newTask,
-      user_id: currentUser?.id,
+  // Ambient Sync
+  useEffect(() => {
+    const ctx = getAudioContext();
+    Object.keys(ambientSounds).forEach((key) => {
+      const { enabled, volume } = ambientSounds[key];
+      let nodeGroup = activeNodesRef.current[key];
+      if (enabled) {
+        if (!nodeGroup) {
+          const gainNode = ctx.createGain(); gainNode.gain.value = volume / 100;
+          let source;
+          if (key === 'rain') source = startRain(ctx, gainNode);
+          else if (key === 'cafe') source = startCafe(ctx, gainNode);
+          else source = startFireplace(ctx, gainNode);
+          activeNodesRef.current[key] = { source, gainNode };
+        } else nodeGroup.gainNode.gain.value = volume / 100;
+      } else if (nodeGroup) {
+        nodeGroup.source.stop(); nodeGroup.gainNode.disconnect();
+        delete activeNodesRef.current[key];
+      }
     });
+  }, [ambientSounds]);
+
+  // Clean up
+  useEffect(() => {
+    return () => {
+      Object.values(activeNodesRef.current).forEach(group => {
+        try { group.source.stop(); group.gainNode.disconnect(); } catch(e) {}
+      });
+    };
+  }, []);
+
+  // Handlers
+  const handleSendMessage = (e) => {
+    e.preventDefault(); if (!chatInput.trim()) return;
+    emitEvent("chat:message", {
+      roomCode: currentRoom.room_code, userId: currentUser.id, username: currentUser.username,
+      message: chatInput, timestamp: new Date().toISOString(),
+    });
+    setChatInput("");
+  };
+
+  const handleAddTask = (e) => {
+    e.preventDefault(); if (!newTask.trim()) return;
+    emitEvent("task:add", { title: newTask });
     setNewTask("");
   };
 
-  const handleToggleTask = (taskId, completed) => {
-    emitEvent("task:update", {
-      room_code: currentRoom.room_code,
-      taskId,
-      updates: { completed: !completed },
+  const toggleTask = (taskId, completed) => emitEvent("task:update", { taskId, updates: { completed: !completed } });
+  const deleteTask = (taskId) => emitEvent("task:delete", { taskId });
+
+  const handleSaveTimerSettings = () => {
+    emitEvent("timer:configure", {
+      studyDuration: timerConfig.studyDuration * 60,
+      breakDuration: timerConfig.breakDuration * 60,
     });
+    setShowTimerSettings(false);
   };
 
-  const handleDeleteTask = (taskId) => {
-    emitEvent("task:delete", {
-      room_code: currentRoom.room_code,
-      taskId,
-    });
-  };
+  const updateSound = (key, updates) => setAmbientSounds(prev => ({ ...prev, [key]: { ...prev[key], ...updates } }));
 
-  // Handle host transfer
-  const handleTransferHost = () => {
-    if (!selectedTransferUser) {
-      showNotification("Please select a participant", "error");
-      return;
-    }
-
-    emitEvent("host:transfer", {
-      room_code: currentRoom.room_code,
-      newHostId: selectedTransferUser,
-    });
-  };
-
-  // Handle participant removal
-  const handleRemoveParticipant = (userId) => {
-    if (!window.confirm("Are you sure you want to remove this participant?")) {
-      return;
-    }
-
-    emitEvent("participant:remove", {
-      room_code: currentRoom.room_code,
-      userId,
-    });
-  };
-
-  // Handle ambient sound
-  const handleSoundChange = (sound) => {
-    setAmbientSound(sound);
-    localStorage.setItem("ambientSound", sound);
-
-    if (audioRef.current) {
-      if (sound === "none") {
-        audioRef.current.pause();
-      } else {
-        // Audio sources would be configured based on sound selection
-        // This is a placeholder for the actual audio implementation
-        audioRef.current
-          .play()
-          .catch((err) => console.log("Audio play failed:", err));
-      }
-    }
-  };
-
-  const handleLeaveRoom = () => {
-    if (currentRoom?.participant_count === 1) {
-      // User is the last one (likely the host)
-      emitEvent("room:leave", {
-        room_code: currentRoom.room_code,
-        user_id: currentUser?.id,
-      });
-    } else {
-      emitEvent("room:leave", {
-        room_code: currentRoom.room_code,
-        user_id: currentUser?.id,
-      });
-    }
-    leaveRoom();
-  };
-
-  if (!currentRoom) {
-    return <div className="room-page">Loading...</div>;
-  }
-
-  // Check if current user is the host based on the participants array
-  const isHost =
-    localParticipants &&
-    localParticipants.some(
-      (p) =>
-        p.is_host &&
-        String(p.user_id).toLowerCase() ===
-          String(currentUser?.id).toLowerCase(),
-    );
-
-  // Diagnostic logging
-  console.log("[RoomPage] Render — isHost evaluation:", {
-    isHost,
-    localParticipantsCount: localParticipants?.length,
-    currentUserId: currentUser?.id,
-    hostParticipant: localParticipants?.find((p) => p.is_host),
-    allParticipants: localParticipants,
-  });
+  const isHost = participants.find(p => p.user_id === currentUser.id)?.is_host;
 
   return (
-    <div className="room-page">
-      <header className="room-header">
-        <div className="room-title">
-          <h1>{currentRoom.name}</h1>
-          <span className="room-code">Code: {currentRoom.room_code}</span>
+    <div className="room-page active">
+      <div className="room-header">
+        <div className="room-header-left">
+          <div className="room-title-section">
+            <h1>{currentRoom.room_name}</h1>
+            <div id="currentRoomSubtitle">{currentRoom.is_public ? "(Public Room)" : "(Private Room)"}</div>
+          </div>
+          <div className="room-info-badges">
+            <div className="info-box"><div className="info-label">Room Code</div><div className="info-value">{currentRoom.room_code}</div></div>
+            <div className="info-box"><div className="info-label">Participants</div><div className="info-value">{participants.length}</div></div>
+          </div>
         </div>
-        <button
-          className="btn btn-danger"
-          onClick={() => setShowLeaveConfirm(true)}
-        >
-          Leave Room
-        </button>
-      </header>
+        <button className="btn-danger" onClick={() => setShowLeaveConfirm(true)}>Leave Room</button>
+      </div>
+
+      <div className="timer-container">
+        <div className={`timer-mode ${roomState.timerState}`}>{roomState.timerState === "study" ? "📚 Study Mode" : "☕ Break Mode"}</div>
+        <div className="timer-display">{timerDisplay}</div>
+        <div className="timer-controls">
+          {isHost ? (
+            <>
+              {roomState.isRunning ? (
+                <button className="btn-secondary" onClick={() => emitEvent("timer:pause")}>Pause</button>
+              ) : (
+                <button className="btn-success" onClick={() => emitEvent("timer:start")}>
+                  {roomState.timerSeconds < (roomState.totalTime || 1500) ? "Resume" : "Start Session"}
+                </button>
+              )}
+              <button className="btn-danger" onClick={() => emitEvent("timer:reset")}>Reset</button>
+              <button className="btn-secondary" onClick={() => setShowTimerSettings(true)}>⚙️ Settings</button>
+            </>
+          ) : (
+            <div className="participant-wait">📍 Waiting for host to control the timer</div>
+          )}
+        </div>
+        <div className="host-status">{isHost ? "👑 You are the Room Host" : "📍 You are a participant"}</div>
+      </div>
 
       <div className="room-content">
-        {/* Left Panel - Timer and Controls */}
-        <div className="left-panel">
-          <div className="timer-container">
-            <div className="timer-display">
-              <span className={`timer ${roomState.timerState}`}>
-                {timerDisplay}
-              </span>
-              <p className="timer-mode">{roomState.timerState}</p>
-            </div>
-
-            <div className="timer-controls">
-              <button
-                className="btn btn-timer"
-                onClick={handleStartTimer}
-                disabled={isTimerRunning}
-              >
-                ▶ Start
-              </button>
-              <button
-                className="btn btn-timer"
-                onClick={handlePauseTimer}
-                disabled={!isTimerRunning}
-              >
-                ⏸ Pause
-              </button>
-              <button className="btn btn-timer" onClick={handleResetTimer}>
-                🔄 Reset
-              </button>
-            </div>
+        <div className="tasks-section">
+          <div className="content-tabs">
+            <button className={`tab-button ${activeTab === "tasks" ? "tab-active" : ""}`} onClick={() => setActiveTab("tasks")}>📝 Shared Tasks</button>
+            <button className={`tab-button ${activeTab === "chat" ? "tab-active" : ""}`} onClick={() => setActiveTab("chat")}>💬 Chat</button>
           </div>
-
-          {/* Ambient Sound Controls */}
-          <div className="ambient-section">
-            <h3>🎵 Ambient Sound</h3>
-            <div className="sound-buttons">
-              {["none", "coffee-shop", "rain", "forest"].map((sound) => (
-                <button
-                  key={sound}
-                  className={`sound-btn ${ambientSound === sound ? "active" : ""}`}
-                  onClick={() => handleSoundChange(sound)}
-                  title={sound.replace("-", " ")}
-                >
-                  {sound === "none"
-                    ? "🔇"
-                    : sound === "coffee-shop"
-                      ? "☕"
-                      : sound === "rain"
-                        ? "🌧️"
-                        : "🌲"}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Center Panel - Tasks */}
-        <div className="center-panel">
-          <h2>📝 Tasks</h2>
-
-          <form onSubmit={handleAddTask} className="task-form">
-            <input
-              type="text"
-              value={newTask}
-              onChange={(e) => setNewTask(e.target.value)}
-              placeholder="Add a new task..."
-              className="task-input"
-            />
-            <button type="submit" className="btn btn-small">
-              Add
-            </button>
-          </form>
-
-          <div className="tasks-list">
-            {tasks.length === 0 ? (
-              <p className="no-tasks">No tasks yet. Add one to get started!</p>
-            ) : (
-              tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className={`task-item ${task.completed ? "completed" : ""}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={task.completed || false}
-                    onChange={() => handleToggleTask(task.id, task.completed)}
-                    className="task-checkbox"
-                  />
-                  <span className="task-text">{task.description}</span>
-                  <button
-                    className="btn-delete"
-                    onClick={() => handleDeleteTask(task.id)}
-                  >
-                    ✕
-                  </button>
+          <div className="tab-content">
+            {activeTab === "tasks" ? (
+              <div id="tasksContent">
+                <form className="add-task-form" onSubmit={handleAddTask}>
+                  <input type="text" placeholder="Add a shared task..." value={newTask} onChange={(e) => setNewTask(e.target.value)} />
+                  <button type="submit">Add Task</button>
+                </form>
+                <div className="task-list">
+                  {tasks.length === 0 ? <div className="empty-state">No tasks.</div> : tasks.map(task => (
+                    <div key={task.id} className={`task-item ${task.completed ? "completed" : ""}`}>
+                      <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id, task.completed)} />
+                      <div className="task-text">{task.title}</div>
+                      <button className="btn-small btn-danger" onClick={() => deleteTask(task.id)}>✕</button>
+                    </div>
+                  ))}
                 </div>
-              ))
+              </div>
+            ) : (
+              <div className="chat-container">
+                <div className="chat-messages">
+                  {chatMessages.length === 0 ? <div className="empty-state">No messages.</div> : chatMessages.map((msg, i) => (
+                    <div key={i} className={`chat-message ${msg.userId === currentUser.id ? "own-message" : ""}`}>
+                      <div className="chat-user">{msg.username}</div>
+                      <div className="chat-text">{msg.message}</div>
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+                <form className="chat-input-form" onSubmit={handleSendMessage}>
+                  <input type="text" placeholder="Send a message..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
+                  <button type="submit">Send</button>
+                </form>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Right Panel - Participants */}
-        <div className="right-panel">
-          <h2>👥 Participants ({localParticipants.length})</h2>
-          {isHost && (
-            <button
-              className="btn btn-primary btn-small"
-              onClick={() => setShowTransferModal(true)}
-              style={{ marginBottom: "15px", width: "100%" }}
-            >
-              👑 Transfer Host
-            </button>
-          )}
-          <div className="participants-list">
-            {localParticipants.map((participant) => (
-              <div
-                key={participant.user_id}
-                className={`participant ${participant.is_host ? "host" : ""}`}
-              >
-                <div className="participant-info">
-                  <div>
-                    <span className="participant-name">
-                      {participant.username}
-                      {participant.is_host && (
-                        <span className="host-badge">👑 Host</span>
-                      )}
-                    </span>
+        <div className="side-panel">
+          <div className="participants-section">
+            <div className="section-title">👥 Studying Now</div>
+            <div className="participant-list">
+              {participants.map(p => (
+                <div key={p.user_id} className="participant">
+                  <div className="participant-avatar">{p.username.charAt(0).toUpperCase()}</div>
+                  <div className="participant-info">
+                    <div className="participant-name">{p.username} {p.is_host ? "⭐" : ""}</div>
+                    <div className="participant-status">{p.is_host ? "👑 Host" : "Member"}</div>
                   </div>
-                  {isHost && !participant.is_host && (
-                    <div className="host-controls">
-                      <button
-                        className="btn-action btn-remove"
-                        onClick={() =>
-                          handleRemoveParticipant(participant.user_id)
-                        }
-                        title="Remove this participant"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                  {isHost && p.user_id !== currentUser.id && (
+                    <button className="btn-remove-participant" onClick={() => emitEvent("participant:remove", { userId: p.user_id })}>✕</button>
                   )}
                 </div>
+              ))}
+              {isHost && participants.length > 1 && <button className="btn-secondary btn-full-width" onClick={() => setShowTransferModal(true)}>👑 Transfer Host</button>}
+            </div>
+          </div>
+          <div className="ambient-sounds">
+            <div className="ambient-title">🎵 Ambient Sounds</div>
+            {Object.keys(ambientSounds).map(key => (
+              <div key={key} className="sound-control">
+                <label className="sound-label">
+                  <input type="checkbox" checked={ambientSounds[key].enabled} onChange={(e) => updateSound(key, { enabled: e.target.checked })} />
+                  {key.charAt(0).toUpperCase() + key.slice(1)} {key === 'rain' ? '☔' : key === 'cafe' ? '☕' : '🔥'}
+                </label>
+                <input type="range" className="sound-volume" min="0" max="100" value={ambientSounds[key].volume} onChange={(e) => updateSound(key, { volume: parseInt(e.target.value) })} />
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Notification */}
-      {notification && (
-        <div className={`notification notification-${notification.type}`}>
-          {notification.message}
-        </div>
+      {showTimerSettings && (
+        <div className="modal-overlay"><div className="modal">
+          <h2>⏱️ Timer Settings</h2>
+          <div className="form-group"><label>Study Duration (min)</label><input type="number" value={timerConfig.studyDuration} onChange={(e) => setTimerConfig(prev => ({ ...prev, studyDuration: parseInt(e.target.value) }))} /></div>
+          <div className="form-group"><label>Break Duration (min)</label><input type="number" value={timerConfig.breakDuration} onChange={(e) => setTimerConfig(prev => ({ ...prev, breakDuration: parseInt(e.target.value) }))} /></div>
+          <div className="modal-buttons"><button className="btn-primary" onClick={handleSaveTimerSettings}>Save</button><button className="btn-secondary" onClick={() => setShowTimerSettings(false)}>Cancel</button></div>
+        </div></div>
       )}
 
-      {/* Transfer Host Modal */}
-      {showTransferModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowTransferModal(false)}
-        >
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>👑 Transfer Host Role</h2>
-              <button
-                className="close-btn"
-                onClick={() => setShowTransferModal(false)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-content">
-              <p>Select a participant to transfer the host role to:</p>
-              <div className="participant-selector">
-                {participants
-                  .filter((p) => !p.is_host)
-                  .map((participant) => (
-                    <button
-                      key={participant.user_id}
-                      className={`participant-option ${selectedTransferUser === participant.user_id ? "selected" : ""}`}
-                      onClick={() =>
-                        setSelectedTransferUser(participant.user_id)
-                      }
-                    >
-                      {participant.username}
-                    </button>
-                  ))}
-              </div>
-              {localParticipants.filter((p) => !p.is_host).length === 0 && (
-                <p style={{ color: "#999", textAlign: "center" }}>
-                  No other participants available
-                </p>
-              )}
-            </div>
-            <div className="modal-buttons">
-              <button
-                className="btn btn-primary"
-                onClick={handleTransferHost}
-                disabled={!selectedTransferUser}
-              >
-                Transfer
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowTransferModal(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Leave Confirmation Modal */}
       {showLeaveConfirm && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowLeaveConfirm(false)}
-        >
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Leave Room?</h2>
-            {isHost && (
-              <p style={{ color: "#c33", marginBottom: "15px" }}>
-                ⚠️ You are the host. The room will be deleted when you leave.
-              </p>
-            )}
-            <div className="modal-buttons">
-              <button className="btn btn-primary" onClick={handleLeaveRoom}>
-                Yes, Leave
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowLeaveConfirm(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <div className="modal-overlay"><div className="modal">
+          <h2>Leave Room?</h2><p>Sure you want to leave?</p>
+          <div className="modal-buttons"><button className="btn-danger" onClick={leaveRoom}>Yes, Leave</button><button className="btn-secondary" onClick={() => setShowLeaveConfirm(false)}>Cancel</button></div>
+        </div></div>
       )}
 
-      <audio ref={audioRef} loop />
+      {showTransferModal && (
+        <div className="modal-overlay"><div className="modal">
+          <h2>👑 Transfer Host</h2><p>Select new host:</p>
+          <div className="transfer-list">{participants.filter(p => p.user_id !== currentUser.id).map(p => (<label key={p.user_id} className="transfer-option"><input type="radio" name="newHost" onChange={() => setSelectedTransferUser(p.user_id)} /> {p.username}</label>))}</div>
+          <div className="modal-buttons"><button className="btn-primary" disabled={!selectedTransferUser} onClick={() => { emitEvent("host:transfer", { newHostId: selectedTransferUser }); setShowTransferModal(false); }}>Transfer</button><button className="btn-secondary" onClick={() => setShowTransferModal(false)}>Cancel</button></div>
+        </div></div>
+      )}
+      {notification && <div className={`notification ${notification.type}`}>{notification.message}</div>}
 
       <style>{`
-        .room-page {
-          min-height: 100vh;
-          background: #f5f5f5;
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        .room-header {
-          background: white;
-          padding: 20px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .room-title h1 {
-          margin: 0;
-          color: #333;
-        }
-
-        .room-code {
-          display: block;
-          color: #999;
-          font-size: 0.9rem;
-          margin-top: 5px;
-        }
-
-        .room-content {
-          display: grid;
-          grid-template-columns: 1fr 2fr 1fr;
-          gap: 20px;
-          padding: 20px;
-          max-width: 1400px;
-          margin: 0 auto;
-        }
-
-        .left-panel, .center-panel, .right-panel {
-          background: white;
-          padding: 20px;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Timer styles */
-        .timer-container {
-          text-align: center;
-          margin-bottom: 30px;
-        }
-
-        .timer-display {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 40px;
-          border-radius: 10px;
-          margin-bottom: 20px;
-        }
-
-        .timer {
-          font-size: 4rem;
-          font-weight: bold;
-          display: block;
-          font-family: 'Courier New', monospace;
-        }
-
-        .timer-mode {
-          margin: 10px 0 0 0;
-          font-size: 1rem;
-          opacity: 0.9;
-        }
-
-        .timer-controls {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-        }
-
-        .btn-timer {
-          padding: 10px;
-          font-size: 0.9rem;
-        }
-
-        /* Ambient Sound */
-        .ambient-section {
-          margin-top: 30px;
-          padding-top: 20px;
-          border-top: 1px solid #e0e0e0;
-        }
-
-        .ambient-section h3 {
-          margin-top: 0;
-          color: #333;
-        }
-
-        .sound-buttons {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 10px;
-        }
-
-        .sound-btn {
-          padding: 15px;
-          border: 2px solid #e0e0e0;
-          border-radius: 5px;
-          background: white;
-          cursor: pointer;
-          font-size: 1.5rem;
-          transition: all 0.3s ease;
-        }
-
-        .sound-btn:hover {
-          border-color: #667eea;
-          background: #f5f5f5;
-        }
-
-        .sound-btn.active {
-          border-color: #667eea;
-          background: #f0f4ff;
-        }
-
-        /* Tasks */
-        .center-panel h2 {
-          margin-top: 0;
-          color: #333;
-        }
-
-        .task-form {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 20px;
-        }
-
-        .task-input {
-          flex: 1;
-          padding: 10px;
-          border: 2px solid #e0e0e0;
-          border-radius: 5px;
-          font-size: 1rem;
-        }
-
-        .task-input:focus {
-          outline: none;
-          border-color: #667eea;
-        }
-
-        .tasks-list {
-          max-height: 500px;
-          overflow-y: auto;
-        }
-
-        .task-item {
-          display: flex;
-          align-items: center;
-          padding: 12px;
-          background: #f9f9f9;
-          border-radius: 5px;
-          margin-bottom: 8px;
-          transition: all 0.3s ease;
-        }
-
-        .task-item:hover {
-          background: #f0f0f0;
-        }
-
-        .task-item.completed .task-text {
-          text-decoration: line-through;
-          color: #999;
-        }
-
-        .task-checkbox {
-          margin-right: 10px;
-          cursor: pointer;
-          width: 18px;
-          height: 18px;
-        }
-
-        .task-text {
-          flex: 1;
-          word-break: break-word;
-        }
-
-        .btn-delete {
-          background: none;
-          border: none;
-          color: #999;
-          cursor: pointer;
-          font-size: 1rem;
-          padding: 5px;
-        }
-
-        .btn-delete:hover {
-          color: #c33;
-        }
-
-        .no-tasks {
-          text-align: center;
-          color: #999;
-          padding: 30px 20px;
-        }
-
-        /* Participants */
-        .right-panel h2 {
-          margin-top: 0;
-          color: #333;
-        }
-
-        .participants-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .participant {
-          padding: 12px;
-          background: #f9f9f9;
-          border-radius: 5px;
-          border-left: 4px solid #e0e0e0;
-        }
-
-        .participant.host {
-          border-left-color: #ffc107;
-          background: #fffbf0;
-        }
-
-        .participant-info {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .participant-name {
-          font-weight: 500;
-          color: #333;
-        }
-
-        .host-badge {
-          font-size: 0.8rem;
-          margin-left: 8px;
-        }
-
-        /* Buttons */
-        .btn {
-          padding: 10px 15px;
-          border: none;
-          border-radius: 5px;
-          font-size: 0.95rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-        }
-
-        .btn-danger {
-          background: #e74c3c;
-          color: white;
-        }
-
-        .btn-danger:hover {
-          background: #c0392b;
-        }
-
-        .btn-secondary {
-          background: #ecf0f1;
-          color: #333;
-          border: 1px solid #bdc3c7;
-        }
-
-        .btn-secondary:hover {
-          background: #d5dbdb;
-        }
-
-        .btn-small {
-          padding: 8px 12px;
-          font-size: 0.85rem;
-        }
-
-        .btn-primary {
-          background: #667eea;
-          color: white;
-        }
-
-        .btn-primary:hover {
-          background: #5568d3;
-        }
-
-        .btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        /* Modal */
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-        }
-
-        .modal {
-          background: white;
-          padding: 30px;
-          border-radius: 8px;
-          max-width: 400px;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-        }
-
-        .modal h2 {
-          margin-top: 0;
-          color: #333;
-        }
-
-        .modal-buttons {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-          margin-top: 20px;
-        }
-
-        /* Notifications */
-        .notification {
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          padding: 15px 20px;
-          border-radius: 5px;
-          color: white;
-          font-weight: 600;
-          z-index: 2000;
-          animation: slideIn 0.3s ease-out;
-        }
-
-        .notification-info {
-          background: #3498db;
-        }
-
-        .notification-success {
-          background: #27ae60;
-        }
-
-        .notification-error {
-          background: #e74c3c;
-        }
-
-        .notification-warning {
-          background: #f39c12;
-        }
-
-        @keyframes slideIn {
-          from {
-            transform: translateX(400px);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-
-        /* Host Controls */
-        .host-controls {
-          display: flex;
-          gap: 8px;
-        }
-
-        .btn-action {
-          background: none;
-          border: none;
-          padding: 5px 10px;
-          cursor: pointer;
-          font-size: 0.9rem;
-          transition: all 0.3s ease;
-          border-radius: 3px;
-        }
-
-        .btn-remove {
-          color: #e74c3c;
-          font-weight: bold;
-        }
-
-        .btn-remove:hover {
-          background: #fee;
-        }
-
-        /* Participant Selector */
-        .participant-selector {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 8px;
-          margin: 15px 0;
-          max-height: 300px;
-          overflow-y: auto;
-        }
-
-        .participant-option {
-          padding: 12px;
-          border: 2px solid #e0e0e0;
-          border-radius: 5px;
-          background: white;
-          cursor: pointer;
-          text-align: left;
-          transition: all 0.2s ease;
-        }
-
-        .participant-option:hover {
-          border-color: #667eea;
-          background: #f0f4ff;
-        }
-
-        .participant-option.selected {
-          border-color: #667eea;
-          background: #667eea;
-          color: white;
-          font-weight: 600;
-        }
-
-        /* Modal Header */
-        .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-
-        .modal-header h2 {
-          margin: 0;
-          color: #333;
-        }
-
-        .close-btn {
-          background: none;
-          border: none;
-          font-size: 1.5rem;
-          cursor: pointer;
-          color: #666;
-          padding: 0;
-        }
-
-        .close-btn:hover {
-          color: #333;
-        }
-
-        /* Modal Content */
-        .modal-content {
-          margin-bottom: 20px;
-        }
-
-        .modal-content p {
-          color: #666;
-          margin: 0 0 15px 0;
-        }
+        .room-page { padding: 20px; min-height: 100vh; background: #f5e6d3; font-family: 'Segoe UI', sans-serif; color: #3d3d3d; }
+        .room-header { background: white; border-radius: 15px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid #d4845c; }
+        .room-header-left { display: flex; gap: 40px; align-items: center; }
+        .info-box { background: #f9f5f0; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #e8d4c8; }
+        .info-label { font-size: 0.8em; color: #8d6e63; text-transform: uppercase; }
+        .info-value { font-size: 1.2em; font-weight: bold; color: #5c4033; }
+        .timer-container { background: white; border-radius: 15px; padding: 40px; margin-bottom: 20px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1); text-align: center; border: 2px solid #e8d4c8; }
+        .timer-mode { font-size: 1.2em; color: #8d6e63; font-weight: bold; }
+        .timer-mode.study { color: #d4845c; } .timer-mode.break { color: #4caf50; }
+        .timer-display { font-size: 5em; font-weight: bold; color: #5c4033; font-family: 'Courier New', monospace; margin: 20px 0; }
+        .timer-controls { display: flex; gap: 12px; justify-content: center; margin-bottom: 15px; }
+        .room-content { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; max-width: 1400px; margin: 0 auto; }
+        .tasks-section, .participants-section, .ambient-sounds { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); border: 1px solid #e8d4c8; }
+        .content-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #f5f1ee; }
+        .tab-button { padding: 10px 20px; background: none; border: none; color: #8d6e63; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; }
+        .tab-button.tab-active { color: #5c4033; border-bottom-color: #d4845c; }
+        .add-task-form { display: flex; gap: 10px; margin-bottom: 20px; }
+        .add-task-form input { flex: 1; padding: 12px; border: 2px solid #e8d4c8; border-radius: 8px; }
+        .task-list { height: 400px; overflow-y: auto; }
+        .task-item { background: #f9f5f0; padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; align-items: center; gap: 15px; }
+        .task-item.completed { opacity: 0.6; } .task-text { flex: 1; color: #5c4033; } .completed .task-text { text-decoration: line-through; }
+        .chat-container { height: 400px; display: flex; flex-direction: column; }
+        .chat-messages { flex: 1; overflow-y: auto; margin-bottom: 10px; }
+        .chat-input-form { display: flex; gap: 10px; }
+        .chat-input-form input { flex: 1; padding: 10px; border: 2px solid #e8d4c8; border-radius: 8px; }
+        .chat-message { margin-bottom: 10px; max-width: 85%; } .own-message { margin-left: auto; text-align: right; }
+        .chat-text { background: #f9f5f0; padding: 10px; border-radius: 10px; display: inline-block; border: 1px solid #e8d4c8; }
+        .own-message .chat-text { background: #d4845c; color: white; border: none; }
+        .participant { display: flex; align-items: center; gap: 12px; padding: 10px; background: #f9f5f0; border-radius: 8px; margin-bottom: 8px; border: 1px solid #e8d4c8; }
+        .participant-avatar { width: 35px; height: 35px; background: #d4845c; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .sound-control { margin-bottom: 15px; } .sound-label { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; font-weight: 600; }
+        .sound-volume { width: 100%; height: 5px; -webkit-appearance: none; background: #e8d4c8; border-radius: 5px; }
+        .sound-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; background: #d4845c; border-radius: 50%; cursor: pointer; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: white; padding: 25px; border-radius: 15px; width: 350px; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        button { padding: 10px 15px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; }
+        .btn-primary { background: #6d4c41; color: white; } .btn-secondary { background: #8d6e63; color: white; } .btn-danger { background: #d32f2f; color: white; } .btn-success { background: #388e3c; color: white; }
+        .notification { position: fixed; bottom: 20px; right: 20px; padding: 15px; border-radius: 8px; color: white; z-index: 2000; }
+        .notification.error { background: #d32f2f; }
 
         @media (max-width: 1024px) {
-          .room-content {
-            grid-template-columns: 1fr;
-          }
+          .room-content { grid-template-columns: 1fr; }
+          .side-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        }
+
+        @media (max-width: 768px) {
+          .room-header { flex-direction: column; gap: 15px; text-align: center; }
+          .room-header-left { flex-direction: column; gap: 15px; }
+          .timer-display { font-size: 3.5em; }
+          .side-panel { grid-template-columns: 1fr; }
+          .room-page { padding: 10px; }
         }
       `}</style>
     </div>

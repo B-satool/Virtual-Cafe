@@ -4,10 +4,10 @@ export const useAuth = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return !!localStorage.getItem("userToken");
   });
-  const [user, setUser] = useState(() => {
     const stored = localStorage.getItem("userId");
     const username = localStorage.getItem("username");
-    return stored ? { id: stored, username } : null;
+    const role = localStorage.getItem("userRole");
+    return stored ? { id: stored, username, role } : null;
   });
   const [authPage, setAuthPage] = useState("login");
   const [loading, setLoading] = useState(false);
@@ -22,16 +22,27 @@ export const useAuth = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      
+      let data;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text || `Server error: ${res.status}`);
+      }
+
       if (!res.ok) throw new Error(data.error || "Login failed");
 
       localStorage.setItem("userToken", data.accessToken);
       localStorage.setItem("userId", data.userId);
       localStorage.setItem("username", data.username || email.split("@")[0]);
+      localStorage.setItem("userRole", data.role || 'user');
 
       setUser({
         id: data.userId,
         username: data.username || email.split("@")[0],
+        role: data.role || 'user',
       });
       setIsAuthenticated(true);
       return true;
@@ -52,14 +63,24 @@ export const useAuth = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, username }),
       });
-      const data = await res.json();
+      
+      let data;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text || `Server error: ${res.status}`);
+      }
+
       if (!res.ok) throw new Error(data.error || "Signup failed");
 
       localStorage.setItem("userToken", data.accessToken);
       localStorage.setItem("userId", data.userId);
       localStorage.setItem("username", username);
+      localStorage.setItem("userRole", 'user'); // Default for signup
 
-      setUser({ id: data.userId, username });
+      setUser({ id: data.userId, username, role: 'user' });
       setIsAuthenticated(true);
       return true;
     } catch (err) {
@@ -74,6 +95,7 @@ export const useAuth = () => {
     localStorage.removeItem("userToken");
     localStorage.removeItem("userId");
     localStorage.removeItem("username");
+    localStorage.removeItem("userRole");
     localStorage.removeItem("currentRoom");
     localStorage.removeItem("currentUsername");
     setUser(null);

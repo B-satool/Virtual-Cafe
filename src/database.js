@@ -44,6 +44,7 @@ async function signUp(email, password, username, fullName) {
             full_name: fullName,
             avatar_url: null,
             profile_picture_url: null,
+            role: 'user',
           },
         ],
         { onConflict: "id" },
@@ -111,6 +112,7 @@ async function logIn(identifier, password) {
       success: true,
       userId: data.user.id,
       username: profile?.username || emailToLogin.split('@')[0],
+      role: profile?.role || 'user',
       accessToken: data.session?.access_token,
       refreshToken: data.session?.refresh_token,
     };
@@ -160,6 +162,50 @@ async function getUserProfile(userId) {
     }
 
     return { success: true, result: data };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function getAllUsers() {
+  try {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, result: data };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function deleteUser(userId) {
+  try {
+    // Delete profile first (cascades or manual depending on DB setup)
+    // In Supabase, deleting from auth.users is preferred but requires service role
+    // Since we only have client role, we delete from our profiles table
+    // and assume the user's auth account will be handled separately or just become orphaned.
+    // However, if we want to delete from auth, we need admin access.
+    
+    // For now, let's delete from user_profiles and let the user know.
+    const { error: profileError } = await supabase
+      .from("user_profiles")
+      .delete()
+      .eq("id", userId);
+
+    if (profileError) {
+      return { success: false, error: profileError.message };
+    }
+
+    // Also remove from any rooms they are in
+    await supabase.from("participants").delete().eq("user_id", userId);
+
+    return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -895,6 +941,8 @@ module.exports = {
   verifyToken,
   // User Profile
   getUserProfile,
+  getAllUsers,
+  deleteUser,
   updateUserProfile,
   uploadProfilePicture,
   // Rooms
@@ -932,4 +980,34 @@ module.exports = {
   logSessionStart,
   logSessionEnd,
   getUserSessionLogs,
+  getChatHistory,
+  addChatMessage,
 };
+
+async function getChatHistory(roomId) {
+  try {
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("room_id", roomId)
+      .order("created_at", { ascending: true })
+      .limit(100);
+    if (error) return { success: false, error: error.message };
+    return { success: true, result: data };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function addChatMessage(roomId, userId, username, message) {
+  try {
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .insert([{ room_id: roomId, user_id: userId, username, message }])
+      .select();
+    if (error) return { success: false, error: error.message };
+    return { success: true, result: data[0] };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}

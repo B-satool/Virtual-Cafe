@@ -13,6 +13,7 @@ CREATE TABLE user_profiles (
   full_name VARCHAR(255),
   avatar_url VARCHAR(255),
   profile_picture_url TEXT,
+  role VARCHAR(50) DEFAULT 'user',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

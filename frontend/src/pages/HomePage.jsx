@@ -1,26 +1,32 @@
-import React from "react";
+import React, { useContext } from "react";
 import { AuthPage } from "./AuthPage";
-import { useAuth } from "../hooks/useAuth";
+import { AuthContext } from "../contexts/AppContexts";
 
 export const HomePage = () => {
-  const { setAuthPage, login, signup, loading, error, clearError } = useAuth();
+  const auth = useContext(AuthContext);
   const [showAuth, setShowAuth] = React.useState(false);
-  const [authMode, setAuthMode] = React.useState("login");
 
   const handleShowLogin = () => {
-    setAuthMode("login");
+    auth.setAuthPage("login");
     setShowAuth(true);
-    setAuthPage("login");
   };
 
   const handleShowSignup = () => {
-    setAuthMode("signup");
+    auth.setAuthPage("signup");
     setShowAuth(true);
-    setAuthPage("signup");
   };
 
   if (showAuth) {
-    return <AuthPage onBack={() => setShowAuth(false)} login={login} signup={signup} loading={loading} error={error} clearError={clearError} />;
+    return (
+      <AuthPage
+        onBack={() => setShowAuth(false)}
+        login={auth.login}
+        signup={auth.signup}
+        loading={auth.loading}
+        error={auth.error}
+        clearError={auth.clearError}
+      />
+    );
   }
 
   return (

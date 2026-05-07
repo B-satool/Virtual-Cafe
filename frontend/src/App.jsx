@@ -1,9 +1,5 @@
-import React, { useEffect, useState } from "react";
-import {
-  AuthContext,
-  RoomContext,
-  SocketContext,
-} from "./contexts/AppContexts";
+import React, { useEffect } from "react";
+import { AuthContext, RoomContext, SocketContext } from "./contexts/AppContexts";
 import { useAuth } from "./hooks/useAuth";
 import { useRoom } from "./hooks/useRoom";
 import { useSocket } from "./hooks/useSocket";
@@ -18,14 +14,8 @@ function AppContent() {
   const room = React.useContext(RoomContext);
   const socket = React.useContext(SocketContext);
 
-  // Determine which page to show
   const renderPage = () => {
-    // First time visitor - show home page
-    if (!auth.isAuthenticated && !auth.user) {
-      return <HomePage />;
-    }
-
-    // Not authenticated - show auth page
+    if (!auth.isAuthenticated && !auth.user) return <HomePage />;
     if (!auth.isAuthenticated) {
       return (
         <AuthPage
@@ -35,11 +25,10 @@ function AppContent() {
           error={auth.error}
           clearError={auth.clearError}
           setAuthPage={auth.setAuthPage}
+          initialAuthPage={auth.authPage}
         />
       );
     }
-
-    // In a room - show room page
     if (room.currentRoom) {
       return (
         <RoomPage
@@ -54,8 +43,6 @@ function AppContent() {
         />
       );
     }
-
-    // Authenticated but not in a room - show landing page
     return (
       <LandingPage
         rooms={room.rooms}
@@ -74,7 +61,6 @@ function AppContent() {
 }
 
 function App() {
-  // Initialize hooks
   const authState = useAuth();
   const roomState = useRoom(authState.user?.id);
   const socketState = useSocket(
@@ -83,77 +69,49 @@ function App() {
     authState.user?.username,
   );
 
-  // Initialize socket with event handlers
   useEffect(() => {
     if (authState.user?.id) {
       socketState.initializeSocket({
-        onParticipantJoined: (data) => {
-          // room:state broadcast handles full participant list updates,
-          // so this is just for diagnostic logging
-          console.log("[App] participant:joined event:", data);
-        },
-        onParticipantLeft: (data) => {
-          console.log("[App] participant:left event:", data);
-        },
-        onParticipantsUpdate: (data) => {
-          console.log("[App] onParticipantsUpdate called with data:", data);
-          if (data.room) {
-            roomState.updateCurrentRoom(data.room);
+        onRoomState: (data) => {
+          if (data.room) roomState.updateCurrentRoom(data.room);
+          if (data.participants) roomState.updateParticipants(data.participants);
+          if (data.timer) {
+            roomState.updateRoomState({
+              timerSeconds: data.timer.timeRemaining,
+              totalTime: data.timer.totalTime,
+              timerState: data.timer.mode,
+              isRunning: data.timer.isRunning,
+            });
           }
-          if (data.participants) {
-            roomState.updateParticipants(data.participants);
+          if (data.config) {
+            roomState.updateRoomState({
+              studyDuration: data.config.studyDuration,
+              breakDuration: data.config.breakDuration,
+            });
           }
         },
-        onRoomClosed: () => {
-          roomState.leaveRoom();
-        },
-        onTimerTick: (data) => {
-          roomState.updateRoomState({ timerSeconds: data.seconds });
-        },
-        onTimerTransition: (data) => {
+        onTimerUpdate: (data) => {
           roomState.updateRoomState({
-            timerState: data.newState,
-            timerSeconds: data.seconds,
+            timerSeconds: data.timeRemaining,
+            totalTime: data.totalTime,
+            timerState: data.mode,
+            isRunning: data.isRunning,
           });
         },
-        onTaskAdded: (data) => {
-          // Task update will be handled in RoomPage
+        onTimerConfigured: (data) => {
+          roomState.updateRoomState({
+            timerSeconds: data.timer.timeRemaining,
+            totalTime: data.timer.totalTime,
+            studyDuration: data.studyDuration,
+            breakDuration: data.breakDuration,
+          });
         },
-        onTaskUpdated: (data) => {
-          // Task update will be handled in RoomPage
-        },
-        onTaskDeleted: (data) => {
-          // Task update will be handled in RoomPage
-        },
+        onRoomClosed: () => roomState.leaveRoom(),
+        onError: (data) => console.error("[Socket Error]", data.message),
       });
     }
-
-    return () => {
-      socketState.disconnectSocket();
-    };
-  }, [authState.user?.id]);
-
-  // CRITICAL: Emit room:join when room code changes or socket reconnects.
-  // Without this, creating/joining a room via REST never tells the socket
-  // to join, so room:state is never received and participants/isHost stay empty.
-  useEffect(() => {
-    const roomCode = roomState.currentRoom?.room_code;
-    if (roomCode && authState.user?.id && socketState.isConnected) {
-      console.log(
-        `[App] Room code available & socket connected — emitting room:join for ${roomCode}`,
-      );
-      socketState.emitEvent("room:join", {
-        roomCode: roomCode,
-        userId: authState.user.id,
-        username: authState.user.username || "",
-      });
-    }
-  }, [
-    roomState.currentRoom?.room_code,
-    socketState.isConnected,
-    authState.user?.id,
-    authState.user?.username,
-  ]);
+    return () => socketState.disconnectSocket();
+  }, [authState.user?.id, roomState.currentRoom?.room_code]);
 
   return (
     <AuthContext.Provider value={authState}>
